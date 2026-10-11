@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A marketplace with one Claude Code plugin, `conan-mods`: a mod whose TypeScript hooks run inside Claude Code. Users install it with `/plugin install conan-mods --marketplace C0nanT/claude-hooks` and update with `claude plugin update conan-mods` + `/reload-plugins`. User-facing behaviour (the four functions, `/conan-mods`, the off band) is in `README.md`.
+A marketplace with one Claude Code plugin, `conan-mods`: a mod whose TypeScript hooks run inside Claude Code. Users install it with `/plugin install conan-mods --marketplace C0nanT/conan-mods` and update with `claude plugin update conan-mods` + `/reload-plugins`. User-facing behaviour (the four functions, `/conan-mods`, the off band) is in `README.md`.
 
 The repo used to be the npm CLI `@c0nant/claude-hooks`, which wrote shell hooks into `settings.json`. That CLI is deprecated, and its last version (a cleanup tool) stays on npm only. Per-PC migration lives in `MIGRATING.md`.
 

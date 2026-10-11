@@ -14,11 +14,11 @@
 
 Status: ready-for-agent
 
-- [ ] Nome do marketplace no manifesto é `conan-mods`; versões não foram tocadas à mão
-- [ ] Título do README sem "claude-hooks →"; comandos de instalação com `C0nanT/conan-mods`
-- [ ] CLAUDE.md e `reset-env.sh` com o comando de instalação novo
-- [ ] MIGRATING.md: comando de instalação novo e seção "Vindo do marketplace `claude-hooks`" (desinstalar `conan-mods@claude-hooks`, remover marketplace `claude-hooks`, adicionar `C0nanT/conan-mods`, instalar `conan-mods` no escopo user, `/reload-plugins`), com sintaxe conferida em `claude plugin uninstall --help`, `claude plugin install --help` e `claude plugin marketplace --help`
-- [ ] Texto ao redor de `@c0nant/claude-hooks@0.4.0` o descreve como a ferramenta de limpeza antiga
-- [ ] `grep` por `claude-hooks` fora de `.scratch/` e CHANGELOG só acha o pacote npm e a seção de migração
+- [x] Nome do marketplace no manifesto é `conan-mods`; versões não foram tocadas à mão
+- [x] Título do README sem "claude-hooks →"; comandos de instalação com `C0nanT/conan-mods`
+- [x] CLAUDE.md e `reset-env.sh` com o comando de instalação novo
+- [x] MIGRATING.md: comando de instalação novo e seção "Vindo do marketplace `claude-hooks`" (desinstalar `conan-mods@claude-hooks`, remover marketplace `claude-hooks`, adicionar `C0nanT/conan-mods`, instalar `conan-mods` no escopo user, `/reload-plugins`), com sintaxe conferida em `claude plugin uninstall --help`, `claude plugin install --help` e `claude plugin marketplace --help`
+- [x] Texto ao redor de `@c0nant/claude-hooks@0.4.0` o descreve como a ferramenta de limpeza antiga
+- [x] `grep` por `claude-hooks` fora de `.scratch/` e CHANGELOG só acha o pacote npm e a seção de migração
 - [ ] `claude plugin validate . --strict` e `claude plugin test .` passam
 - [ ] Um commit no `main` tipo `refactor!: rename project and marketplace to conan-mods` com rodapé `BREAKING CHANGE: marketplace renamed from claude-hooks to conan-mods`; sem push

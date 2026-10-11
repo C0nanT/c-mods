@@ -1,4 +1,4 @@
-# claude-hooks → `conan-mods`
+# `conan-mods`
 
 A Claude Code plugin (a mod: TypeScript hooks that run inside Claude Code) with
 eight functions:
@@ -21,7 +21,7 @@ The four Bash guards (`git-guard`, `dotenv-guard`, `secret-guard`, `rm-guard`) c
 Inside Claude Code:
 
 ```
-/plugin install conan-mods --marketplace C0nanT/claude-hooks
+/plugin install conan-mods --marketplace C0nanT/conan-mods
 ```
 
 Install it in the user (global) scope. It needs no npm, `jq` or `settings.json`

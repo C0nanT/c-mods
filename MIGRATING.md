@@ -33,6 +33,9 @@ couple of minutes and is safe to repeat.
 
 ## 1. Check you have the cleanup tool
 
+`@c0nant/claude-hooks@0.4.0` is the old cleanup tool: the last version of the
+deprecated npm package, kept only to remove the old hooks.
+
 ```bash
 npx @c0nant/claude-hooks@0.4.0 --help | head -1
 ```
@@ -75,12 +78,28 @@ Run it a second time if you want proof: everything reads `does not exist`.
 Inside Claude Code:
 
 ```
-/plugin install conan-mods --marketplace C0nanT/claude-hooks
+/plugin install conan-mods --marketplace C0nanT/conan-mods
 ```
 
 The `caveman` function reads `~/.claude/skills/caveman/SKILL.md`. If
 `ls ~/.claude/skills/caveman/SKILL.md` fails, install the skills first:
 `npx skills@latest add C0nanT/skills`.
+
+## Coming from the `claude-hooks` marketplace
+
+Skip this if you never installed the plugin through the marketplace named
+`claude-hooks`. Otherwise swap it for `conan-mods`, in Claude Code:
+
+1. `/plugin uninstall conan-mods@claude-hooks`
+2. `/plugin marketplace remove claude-hooks`
+3. `/plugin marketplace add C0nanT/conan-mods`
+4. `/plugin install conan-mods@conan-mods` (user scope, the default)
+5. `/reload-plugins`
+
+Same from a shell: `claude plugin uninstall conan-mods@claude-hooks`,
+`claude plugin marketplace remove claude-hooks`,
+`claude plugin marketplace add C0nanT/conan-mods`,
+`claude plugin install conan-mods@conan-mods --scope user`.
 
 ## 5. Check the plugin works
 
