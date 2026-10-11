@@ -24,12 +24,16 @@ function pathsOf(word: string): string[] {
   return equals === -1 ? [word] : [word.slice(equals + 1), word]
 }
 
+/** Programs that only check whether a file exists: their arguments are not checked. */
+const EXISTENCE_CHECKS = ['test', '[', 'ls']
+
 type Command = { prefix: readonly string[]; program: string | undefined; args: readonly string[]; redirects: readonly string[] }
 
 /** The first word of the commands that is a path to a .env file, or undefined when none is. */
 export function blockedEnvWord(commands: readonly Command[]): string | undefined {
   for (const command of commands) {
-    const words = [...command.prefix, ...(command.program === undefined ? [] : [command.program]), ...command.args, ...command.redirects]
+    const args = command.program !== undefined && EXISTENCE_CHECKS.includes(command.program) ? [] : command.args
+    const words = [...command.prefix, ...(command.program === undefined ? [] : [command.program]), ...args, ...command.redirects]
     const path = words.flatMap(pathsOf).find(isEnvWord)
     if (path !== undefined) return path
   }

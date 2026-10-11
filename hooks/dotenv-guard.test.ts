@@ -40,6 +40,10 @@ const BASH_BLOCKED: [string, string][] = [
   ['cat .env | grep DATABASE_URL', '.env'],
   ['grep -E "^POSTGRES" .env', '.env'],
   ['cp .env .baseline-wt/.env', '.env'],
+  // Existence-check programs only exempt their own arguments.
+  ['ls .env && cat .env', '.env'],
+  ['ls > .env', '.env'],
+  ['[ -f .env ] && source .env', '.env'],
 ]
 const BASH_ALLOWED = [
   'cat .env.example',
@@ -59,6 +63,11 @@ const BASH_ALLOWED = [
   'echo "copy .env.example to .env"',
   'echo "remember to copy .env.example to .env"',
   "echo 'unclosed quote with no env file",
+  // Existence checks.
+  'test -e .env',
+  '[ -f .env ] && echo exists',
+  'ls .env*',
+  'ls -la .env',
   // Inert text: heredoc bodies, commit messages, inline interpreter code.
   "cat > notes.md <<'EOF'\ncat .env\nEOF",
   'git commit -m "stop cat .env"',
