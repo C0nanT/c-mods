@@ -15,8 +15,8 @@
 Status: ready-for-agent
 
 - [ ] Usuário fez push nos dois repos
-- [ ] CI do plugin passou e criou o commit `2.0.0 [skip ci]` e a tag `v2.0.0`
-- [ ] Passos do MIGRATING.md seguidos sem desvio; qualquer passo errado corrigido no próprio MIGRATING.md
-- [ ] `claude plugin marketplace list` mostra `conan-mods` e não mostra `claude-hooks`
-- [ ] Plugin instalado como `conan-mods@conan-mods` na 2.0.0
+- [x] CI do plugin passou e criou o commit `3.0.1 [skip ci]` e a tag `v3.0.1` (a 2.0.0 já existia; o rename saiu como major 3.0.0)
+- [x] Passos do MIGRATING.md seguidos sem desvio; nenhum passo errado
+- [x] `claude plugin marketplace list` mostra `conan-mods` e não mostra `claude-hooks`
+- [x] Plugin instalado como `conan-mods@conan-mods` na 3.0.1
 - [ ] `/conan-mods` abre numa sessão nova

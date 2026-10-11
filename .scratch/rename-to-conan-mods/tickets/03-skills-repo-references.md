@@ -11,11 +11,11 @@
 
 **Blocked by:** 01 (Renomear o repo no GitHub)
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] Todos os links e comandos citados usam `C0nanT/conan-mods`; "projeto claude-hooks" vira "projeto conan-mods"
-- [ ] README bate literalmente com o bloco de instalação
-- [ ] `scripts/reset-env.sh` usa a versão fixa `@0.4.0` na limpeza e o `/plugin install` novo na mensagem final
-- [ ] `grep` por `claude-hooks` fora de `docs/archive/` só acha o pacote npm (`uninstall.sh`, `scripts/reset-env.sh`) e nada mais
-- [ ] Nenhum travessão introduzido
-- [ ] Um commit no `main`; sem push
+- [x] Todos os links e comandos citados usam `C0nanT/conan-mods`; "projeto claude-hooks" vira "projeto conan-mods"
+- [x] README bate literalmente com o bloco de instalação
+- [x] `scripts/reset-env.sh` usa a versão fixa `@0.4.0` na limpeza e o `/plugin install` novo na mensagem final
+- [x] `grep` por `claude-hooks` fora de `docs/archive/` só acha o pacote npm (`uninstall.sh`, `scripts/reset-env.sh`) e nada mais
+- [x] Nenhum travessão introduzido
+- [x] Um commit no `main`; sem push
