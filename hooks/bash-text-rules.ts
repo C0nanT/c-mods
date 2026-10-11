@@ -16,6 +16,8 @@ type Word = {
   isQuoted: boolean
   /** True when the word holds a command substitution, which runs whatever command it holds. */
   runsCode: boolean
+  /** True when the word holds an unquoted `*`, `?` or `[`, which the shell may expand to file names. */
+  hasGlob: boolean
   isRedirectTarget: boolean
 }
 
@@ -26,6 +28,8 @@ type Heredoc = {
   /** From the first body line to the end of the delimiter line; set once the body is read. */
   start: number
   end: number
+  /** Where the delimiter line starts, so the body is `start` to `bodyEnd`. */
+  bodyEnd: number
   /** True when an unquoted body holds a command substitution, which the shell runs while reading it. */
   runsCode: boolean
 }
@@ -36,7 +40,7 @@ type SimpleCommand = { words: Word[]; heredocs: Heredoc[] }
 class Unparsable extends Error {}
 
 /** Programs that run text they are given: their heredocs and quoted words are analysed as commands. */
-const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', '.', 'ssh', 'su']
+const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', 'ssh', 'su']
 /** Programs whose heredoc body is inert, besides the interpreters and `git commit`. */
 const HEREDOC_READERS = ['cat', 'tee']
 /** Programs that may follow an inert span in a pipeline: they print or count text, never run it. */
@@ -94,7 +98,7 @@ function parse(command: string): SimpleCommand[][] {
       if (operator !== undefined) {
         i += operator.length
         if (operator === '<<' || operator === '<<-') {
-          delimiterFor = { delimiter: '', stripsTabs: operator === '<<-', isQuoted: false, start: -1, end: -1, runsCode: false }
+          delimiterFor = { delimiter: '', stripsTabs: operator === '<<-', isQuoted: false, start: -1, end: -1, bodyEnd: -1, runsCode: false }
           current.heredocs.push(delimiterFor)
           pending.push(delimiterFor)
         } else if (REDIRECTS.includes(operator)) isRedirectNext = true
@@ -133,6 +137,7 @@ function readBodies(command: string, start: number, heredocs: readonly Heredoc[]
       if (!heredoc.isQuoted && /(^|[^\\])(\\\\)*\\$/.test(line)) throw new Unparsable()
       if ((heredoc.stripsTabs ? line.replace(/^\t+/, '') : line) === heredoc.delimiter) {
         heredoc.end = lineEnd
+        heredoc.bodyEnd = i
         heredoc.runsCode = !heredoc.isQuoted && /\$\(|`/.test(command.slice(heredoc.start, i))
         i = lineEnd + 1
         break
@@ -147,6 +152,7 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
   let value = ''
   let isQuoted = false
   let runsCode = false
+  let hasGlob = false
   let i = start
   while (i < command.length) {
     const char = command.charAt(i)
@@ -194,10 +200,11 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
       i = expansion.end
     } else {
       value += char
+      hasGlob ||= '*?['.includes(char)
       i++
     }
   }
-  return { start, end: i, value, isQuoted, runsCode }
+  return { start, end: i, value, isQuoted, runsCode, hasGlob }
 }
 
 /** A `$`, `${...}`, `$(...)` or backtick expansion starting at `start`. */
@@ -246,18 +253,30 @@ function skipBalanced(command: string, start: number, open: string, close: strin
   throw new Unparsable()
 }
 
-const basename = (value: string) => value.split('/').pop() ?? ''
+/** The index of the program among a command's words, past `VAR=x` assignments and wrappers; -1 when there is none. */
+const programIndex = (words: readonly string[]) =>
+  words.findIndex(word => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) && !WRAPPERS.includes(word))
 
+/** The part after the last `/`, ignoring trailing slashes. */
+export const basename = (value: string) => value.split('/').filter(Boolean).pop() ?? ''
+
+/** True when any word names a shell, or the program is `.` (as an argument, `.` is the current directory). */
 function isShell(command: SimpleCommand): boolean {
-  return command.words.some(word => SHELLS.includes(basename(word.value)))
+  return programOf(command)?.name === '.' || command.words.some(word => SHELLS.includes(basename(word.value)))
 }
 
-/** The program and its arguments, past `VAR=x` assignments, wrappers such as `sudo`, and redirect targets. */
-function programOf(command: SimpleCommand): { name: string; args: Word[] } | undefined {
+/** A command's words split around the program, past `VAR=x` assignments and wrappers such as `sudo`; redirect targets left out. */
+function splitAtProgram(command: SimpleCommand): { prefix: Word[]; program: Word | undefined; args: Word[] } {
   const words = command.words.filter(word => !word.isRedirectTarget)
-  const start = words.findIndex(word => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word.value) && !WRAPPERS.includes(word.value))
-  const program = words[start]
-  return program === undefined ? undefined : { name: basename(program.value), args: words.slice(start + 1) }
+  const found = programIndex(words.map(word => word.value))
+  const start = found === -1 ? words.length : found
+  return { prefix: words.slice(0, start), program: words[start], args: words.slice(start + 1) }
+}
+
+/** The program's base name and its arguments; undefined when the command has no program. */
+function programOf(command: SimpleCommand): { name: string; args: Word[] } | undefined {
+  const { program, args } = splitAtProgram(command)
+  return program === undefined ? undefined : { name: basename(program.value), args }
 }
 
 function interpreterCode(flags: readonly string[], args: readonly Word[]): Word[] {
@@ -351,4 +370,59 @@ export function executedText(command: string): string {
   }
   text += command.slice(at)
   return [text, ...shellText].join('\n')
+}
+
+/** One simple command as the shell reads it, quotes removed and quoted text kept as one word. */
+export type ShellCommand = {
+  /** The `VAR=x` assignments and wrappers such as `sudo` before the program. */
+  prefix: string[]
+  /** The program word as written, or undefined when the command holds only a prefix or redirects. */
+  program: string | undefined
+  args: string[]
+  redirects: string[]
+  /** The words, from any of the above, that hold an unquoted wildcard the shell may expand. */
+  globs: string[]
+}
+
+/**
+ * The simple commands of a command string, or undefined when it cannot be parsed with confidence. Text a
+ * shell runs is read as commands too: the heredoc bodies of a pipeline that feeds a shell, and command
+ * substitutions. Quoted text passed to a shell is not, since `executedText` appends it already.
+ */
+export function simpleCommands(command: string): ShellCommand[] | undefined {
+  try {
+    return commandsOf(command)
+  } catch (e) {
+    if (e instanceof Unparsable) return undefined
+    throw e
+  }
+}
+
+function commandsOf(command: string): ShellCommand[] {
+  const commands: ShellCommand[] = []
+  for (const pipeline of parse(command)) {
+    const lastShell = pipeline.findLastIndex(isShell)
+    pipeline.forEach((simple, index) => {
+      commands.push(shellCommand(simple))
+      for (const word of simple.words) {
+        if (word.runsCode) commands.push(...commandsOf(word.value.replace(/\$\(|\)|`/g, '\n')))
+      }
+      if (index <= lastShell) {
+        for (const heredoc of simple.heredocs) commands.push(...commandsOf(command.slice(heredoc.start, heredoc.bodyEnd)))
+      }
+    })
+  }
+  return commands
+}
+
+function shellCommand(command: SimpleCommand): ShellCommand {
+  const { prefix, program, args } = splitAtProgram(command)
+  const values = (words: readonly Word[]) => words.map(word => word.value)
+  return {
+    prefix: values(prefix),
+    program: program?.value,
+    args: values(args),
+    redirects: values(command.words.filter(word => word.isRedirectTarget)),
+    globs: values(command.words.filter(word => word.hasGlob)),
+  }
 }

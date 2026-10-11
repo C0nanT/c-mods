@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { executedText } from './bash-text-rules'
-import { BASH_BLOCKED_MESSAGE, bashReferencesEnv, DOTENV_FILE_TOOLS, fileBlockedMessage, isBlockedEnvPath } from './dotenv-guard-rules'
+import { bashBlockedMessage, blockedEnvIn, DOTENV_FILE_TOOLS, fileBlockedMessage, isBlockedEnvPath } from './dotenv-guard-rules'
 import { blockedMessage, matchDangerous } from './git-guard-rules'
 import { matchRmDangerous, rmBlockedMessage } from './rm-guard-rules'
 import { isExtensionRule, matchSecretCommand, matchSecretPath, resolveCommandPath, SECRET_FILE_TOOLS, secretBlockedMessage } from './secret-guard-rules'
@@ -48,6 +48,11 @@ async function applyToggle($: EngineInterface, state: StatusLineState, name: Tog
  */
 function failClosed($: EngineInterface, e: unknown, next: ((e: unknown) => unknown) & { called: boolean }, guard: string, noun: 'command' | 'call') {
   return next.called ? next(e) : { deny: `${$.plugin.name}: ${guard} failed, ${noun} blocked.` }
+}
+
+/** The dotenv-guard denial for a file tool's or Grep's path input; undefined when it may pass. */
+function envPathDenial(path: unknown): { deny: string } | undefined {
+  return typeof path === 'string' && path !== '' && isBlockedEnvPath(path) ? { deny: fileBlockedMessage(path) } : undefined
 }
 
 const CAVEMAN_WARNING = 'caveman: skill não encontrada, rode `npx skills@latest add C0nanT/skills`'
@@ -361,13 +366,18 @@ export const register: Register = on => {
 
   on('tool.call', { tool: [...DOTENV_FILE_TOOLS] }, async ($, e, next) => {
     if (!(await readToggles($))['dotenv-guard']) return next(e)
-    const path = typeof e.file_path === 'string' ? e.file_path : ''
-    return path !== '' && isBlockedEnvPath(path) ? { deny: fileBlockedMessage(path) } : next(e)
+    return envPathDenial(e.file_path) ?? next(e)
+  }).catch(($, e, next) => failClosed($, e, next, 'dotenv-guard', 'call'))
+
+  on('tool.call', { tool: 'Grep' }, async ($, e, next) => {
+    if (!(await readToggles($))['dotenv-guard']) return next(e)
+    return envPathDenial(e.path) ?? next(e)
   }).catch(($, e, next) => failClosed($, e, next, 'dotenv-guard', 'call'))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!(await readToggles($))['dotenv-guard']) return next(e)
-    return bashReferencesEnv(executedText(e.command)) ? { deny: BASH_BLOCKED_MESSAGE } : next(e)
+    const word = blockedEnvIn(executedText(e.command))
+    return word === undefined ? next(e) : { deny: bashBlockedMessage(word) }
   }).catch(($, e, next) => failClosed($, e, next, 'dotenv-guard', 'command'))
 
   on('tool.call', { tool: [...SECRET_FILE_TOOLS] }, async ($, e, next) => {

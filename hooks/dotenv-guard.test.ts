@@ -15,8 +15,69 @@ const FILE_ALLOWED = [
   ['Read', '/project/.env.dist'],
   ['Read', '/project/.env.template'],
 ]
-const BASH_BLOCKED = ['cat .env', 'source .env', 'cat /app/.env']
-const BASH_ALLOWED = ['cat .env.example', 'echo .env.example', 'grep KEY .env.example']
+// [command, the word the deny message names]
+const BASH_BLOCKED: [string, string][] = [
+  ['cat .env', '.env'],
+  ['cat ../.env', '../.env'],
+  ['cat /app/.env', '/app/.env'],
+  ['cat backend/.env.local', 'backend/.env.local'],
+  ['cat ".env"', '.env'],
+  ["cat '.env'", '.env'],
+  ['source .env', '.env'],
+  ['. .env', '.env'],
+  ['grep ".env" src/', '.env'],
+  ['node --env-file=.env app.js', '.env'],
+  ['ENV_FILE=backend/.env.local ./run', 'backend/.env.local'],
+  ['wc -l < .env', '.env'],
+  ['cat .env*', '.env*'],
+  ['cat ".env"*', '.env*'],
+  ['grep X backend/.env.*', 'backend/.env.*'],
+  ['echo "$(cat .env)"', '.env'],
+  ["sh -c 'cat .env'", '.env'],
+  ['bash <<EOF\ncat ../.env\nEOF', '../.env'],
+  // Unparsable (unclosed quote): split on whitespace and punctuation.
+  ["cat .env 'unclosed", '.env'],
+  // Real accesses from the transcript history.
+  ['cat .env | grep DATABASE_URL', '.env'],
+  ['grep -E "^POSTGRES" .env', '.env'],
+  ['cp .env .baseline-wt/.env', '.env'],
+  // Existence-check programs only exempt their own arguments.
+  ['ls .env && cat .env', '.env'],
+  ['ls > .env', '.env'],
+  ['[ -f .env ] && source .env', '.env'],
+]
+const BASH_ALLOWED = [
+  'cat .env.example',
+  'cat .env.sample',
+  'cat .env.dist',
+  'cat .env.template',
+  'echo .env.example',
+  'grep KEY .env.example',
+  // Mentions that the transcript history shows were wrongly blocked.
+  'grep -rn "import.meta.env" src',
+  'grep -rn "import.meta.env" front-end/src',
+  'grep "process.env.API_URL" -r .',
+  // `.` as an argument (the current directory) is not a shell, so quoted words stay arguments.
+  'grep -rn "\\.env" .',
+  'grep -r "\\.env" . | head',
+  'find . -name ".env*"',
+  'grep -n "\\.env" SKILL.md',
+  'grep -n "gitignore\\|\\.env" SKILL.md',
+  "printf '/.env\\n' >> .gitignore",
+  'gh repo edit --description "guards for git, .env, secrets"',
+  'echo "copy .env.example to .env"',
+  'echo "remember to copy .env.example to .env"',
+  "echo 'unclosed quote with no env file",
+  // Existence checks.
+  'test -e .env',
+  '[ -f .env ] && echo exists',
+  'ls .env*',
+  'ls -la .env',
+  // Inert text: heredoc bodies, commit messages, inline interpreter code.
+  "cat > notes.md <<'EOF'\ncat .env\nEOF",
+  'git commit -m "stop cat .env"',
+  "python3 -c 'open(\".env\")'",
+]
 
 for (const [tool, file_path] of FILE_BLOCKED) {
   test(`blocks: ${tool} ${file_path}`, async ($, on) => {
@@ -37,37 +98,58 @@ for (const [tool, file_path] of FILE_ALLOWED) {
   })
 }
 
-for (const command of BASH_BLOCKED) {
-  test(`blocks bash: ${command}`, async ($, on) => {
+for (const [command, word] of BASH_BLOCKED) {
+  test(`blocks bash: ${JSON.stringify(command)}`, async ($, on) => {
     mock.store(on)
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
     const out = await $.tool.call({ tool: 'Bash', command })
-    expect(out.deny).toBe('Bash command references a .env file which may contain secrets. Use .env.example instead.')
+    expect(out.deny).toBe(`Access to ${word} is blocked — .env files may contain secrets. Read .env.example instead.`)
   })
 }
 
 for (const command of BASH_ALLOWED) {
-  test(`allows bash: ${command}`, async ($, on) => {
+  test(`allows bash: ${JSON.stringify(command)}`, async ($, on) => {
     mock.store(on)
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
     expect((await $.tool.call({ tool: 'Bash', command })).text).toBe('ran')
   })
 }
 
-test('allows: a tool outside the list (Grep)', async ($, on) => {
-  mock.store(on)
-  on('tool.call', { tool: 'Grep' }, () => ({ result: 'ran', text: 'ran' }))
-  expect((await $.tool.call({ tool: 'Grep', file_path: '/project/.env' })).text).toBe('ran')
-})
+for (const path of ['/project/.env', '/project/.env.local']) {
+  test(`blocks: Grep path ${path}`, async ($, on) => {
+    mock.store(on)
+    on('tool.call', { tool: 'Grep' }, () => ({ result: 'ran', text: 'ran' }))
+    const out = await $.tool.call({ tool: 'Grep', pattern: 'KEY', path })
+    expect(out.deny).toBe(
+      `Access to ${path.split('/').pop()} is blocked — .env files may contain secrets. Read .env.example instead.`,
+    )
+  })
+}
+
+for (const [pattern, path] of [
+  ['KEY', '/project/.env.example'],
+  ['.env', '/project/src'],
+  ['.env', undefined],
+]) {
+  test(`allows: Grep pattern ${pattern} path ${path}`, async ($, on) => {
+    mock.store(on)
+    on('tool.call', { tool: 'Grep' }, () => ({ result: 'ran', text: 'ran' }))
+    expect((await $.tool.call({ tool: 'Grep', pattern, path })).text).toBe('ran')
+  })
+}
 
 test('/conan-mods dotenv-guard off lets everything pass, on blocks again', async ($, on) => {
   mock.store(on)
   on('tool.call', { tool: 'Read' }, () => ({ result: 'ran', text: 'ran' }))
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
+  on('tool.call', { tool: 'Grep' }, () => ({ result: 'ran', text: 'ran' }))
   await $.command.run({ command: 'conan-mods', args: 'dotenv-guard off' })
+  expect((await $.tool.call({ tool: 'Grep', pattern: 'K', path: '/p/.env' })).text).toBe('ran')
   expect((await $.tool.call({ tool: 'Read', file_path: '/p/.env' })).text).toBe('ran')
   expect((await $.tool.call({ tool: 'Bash', command: 'cat .env' })).text).toBe('ran')
   await $.command.run({ command: 'conan-mods', args: 'dotenv-guard on' })
   expect((await $.tool.call({ tool: 'Read', file_path: '/p/.env' })).deny).toContain('is blocked')
-  expect((await $.tool.call({ tool: 'Bash', command: 'cat .env' })).deny).toContain('references a .env')
+  expect((await $.tool.call({ tool: 'Bash', command: 'cat .env' })).deny).toBe(
+    'Access to .env is blocked — .env files may contain secrets. Read .env.example instead.',
+  )
 })
