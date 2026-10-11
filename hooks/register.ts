@@ -365,6 +365,12 @@ export const register: Register = on => {
     return path !== '' && isBlockedEnvPath(path) ? { deny: fileBlockedMessage(path) } : next(e)
   }).catch(($, e, next) => failClosed($, e, next, 'dotenv-guard', 'call'))
 
+  on('tool.call', { tool: 'Grep' }, async ($, e, next) => {
+    if (!(await readToggles($))['dotenv-guard']) return next(e)
+    const path = typeof e.path === 'string' ? e.path : ''
+    return path !== '' && isBlockedEnvPath(path) ? { deny: fileBlockedMessage(path) } : next(e)
+  }).catch(($, e, next) => failClosed($, e, next, 'dotenv-guard', 'call'))
+
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!(await readToggles($))['dotenv-guard']) return next(e)
     const text = executedText(e.command)
