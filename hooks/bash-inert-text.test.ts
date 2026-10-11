@@ -3,7 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 // Every guard is on (empty store) and every path exists, so an allowed command passes only because
 // the guards skip its inert text.
 const GIT = 'matches dangerous pattern'
-const DOTENV = 'references a .env file'
+const DOTENV = 'Access to .env is blocked'
 const SECRET = 'matches secret rule'
 const RM = "matches dangerous pattern 'rm -rf <dangerous target>'"
 
