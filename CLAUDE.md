@@ -15,7 +15,6 @@ git config core.hooksPath .githooks   # pre-push runs validate + test
 claude plugin validate .              # manifests and hooks module
 claude plugin test .                  # every hooks/*.test.ts
 claude --plugin-dir .                 # run Claude Code with the plugin loaded from this folder
-./reset-env.sh                        # dev reset: old npm cleanup (npx @0.4.0) + wipe ~/.agents/skills and ~/.claude/skills
 ```
 
 `validate` always warns that the root `CLAUDE.md` is not loaded as plugin context. That warning is expected, so CI runs `validate` without `--strict`.
