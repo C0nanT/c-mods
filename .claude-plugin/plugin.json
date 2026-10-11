@@ -1,6 +1,6 @@
 {
   "name": "conan-mods",
-  "version": "1.4.1",
+  "version": "2.0.0",
   "description": "Conan's Claude Code mods: caveman prompt, git-guard, dotenv-guard and an end-of-task sound, each toggled with /conan-mods.",
   "author": {
     "name": "Conan Torres"
