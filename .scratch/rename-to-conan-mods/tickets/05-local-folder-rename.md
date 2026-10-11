@@ -10,8 +10,8 @@
 
 **Blocked by:** 04 (Push, release 2.0.0 e migração desta máquina)
 
-Status: ready-for-agent
+Status: done
 
-- [ ] Pasta renomeada, sem trabalho não commitado perdido (`git status` limpo antes)
-- [ ] `settings.local.json` do repo skills cita o caminho novo e não o antigo
-- [ ] `git status` no caminho novo funciona e o remote é `C0nanT/conan-mods`
+- [x] Pasta renomeada, sem trabalho não commitado perdido (`git status` limpo antes)
+- [x] `settings.local.json` do repo skills cita o caminho novo e não o antigo
+- [x] `git status` no caminho novo funciona e o remote é `C0nanT/conan-mods`
