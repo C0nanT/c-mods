@@ -12,11 +12,11 @@
 
 **Blocked by:** 02 (Renomear marketplace e textos do repo do plugin), 03 (Corrigir referências no repo skills)
 
-Status: ready-for-agent
+Status: done
 
-- [ ] Usuário fez push nos dois repos
+- [x] Usuário fez push nos dois repos
 - [x] CI do plugin passou e criou o commit `3.0.1 [skip ci]` e a tag `v3.0.1` (a 2.0.0 já existia; o rename saiu como major 3.0.0)
 - [x] Passos do MIGRATING.md seguidos sem desvio; nenhum passo errado
 - [x] `claude plugin marketplace list` mostra `conan-mods` e não mostra `claude-hooks`
 - [x] Plugin instalado como `conan-mods@conan-mods` na 3.0.1
-- [ ] `/conan-mods` abre numa sessão nova
+- [x] `/conan-mods` abre numa sessão nova
