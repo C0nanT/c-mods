@@ -7,7 +7,7 @@
  * quoted text is appended as a command of its own. A command `bash-parser` cannot parse with confidence is
  * returned whole, so the guards stay closed.
  */
-import { parse, Unparsable } from './bash-parser'
+import { basename, parse, Unparsable } from './bash-parser'
 import type { SimpleCommand, Word } from './bash-parser'
 
 /** Programs that run text they are given: their heredocs and quoted words are analysed as commands. */
@@ -32,9 +32,6 @@ const COMMIT_VALUE_FLAGS = 'CcFt'
 /** The index of the program among a command's words, past `VAR=x` assignments and wrappers; -1 when there is none. */
 const programIndex = (words: readonly string[]) =>
   words.findIndex(word => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) && !WRAPPERS.includes(word))
-
-/** The part after the last `/`, ignoring trailing slashes. */
-export const basename = (value: string) => value.split('/').filter(Boolean).pop() ?? ''
 
 /** A command's words split around the program, past `VAR=x` assignments and wrappers such as `sudo`; redirect targets left out. */
 function splitAtProgram(command: SimpleCommand): { prefix: Word[]; program: Word | undefined; args: Word[] } {

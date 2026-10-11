@@ -47,6 +47,7 @@ When applying a principle would require reshaping modules outside the current fl
 ### In this repo
 
 - **Policy**: `hooks/*-rules.ts` and `hooks/toggles.ts`. Pure functions with no imports from `claude-code` and no `$`.
+- **Policy (shell parsing)**: `hooks/bash-parser.ts`. Pure and without `$`: splits Bash text into words, redirects and heredocs for the guard rules; it holds no guard policy.
 - **Details**: `hooks/register.ts`: every `$.store`, `$.state`, `$.fs`, `$.env`, `$.process`, `$.ui`, `$.session` and `$.clock` call, inside the local helpers declared in that file.
 - **Wiring**: `register.ts` reads through its `$` helpers, calls the rules functions with plain values, and acts on what they return: argv lists, deny messages, status segments, band text. Policy never receives `$` or an IO interface.
 - **Test substitution**: two tiers. Rules modules are tested directly with plain values (`statusline-rules.test.ts`). Behaviour tests fire events through `claude-code/testing`, stub IO with `on('process.run' | 'fs.read' | 'fs.write', …)` plus `mock.store`/`mock.env`/`mock.clock`, and assert only visible outcomes.

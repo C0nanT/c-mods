@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { bashRowTests, PASS } from './bash-rows'
+import type { Row } from './bash-rows'
 
 const HOME = '/home/test'
 const FILE_BLOCKED = [
@@ -22,8 +24,6 @@ const FILE_ALLOWED = [
  * expected is a fragment of the deny message when the guard denies, or PASS when it lets the command run.
  * A regression is one more row.
  */
-const PASS = null
-type Row = [command: string, expected: string | typeof PASS]
 const BASH_ROWS: Row[] = [
   // Denied.
   ['cat ~/.ssh/id_rsa', 'matches secret rule'],
@@ -70,14 +70,7 @@ for (const file_path of FILE_ALLOWED) {
   })
 }
 
-for (const [command, expected] of BASH_ROWS) {
-  test(`${expected === PASS ? 'passes' : 'denies'} bash: ${JSON.stringify(command)}`, async ($, on) => {
-    await setup($, on)
-    const out = await $.tool.call({ tool: 'Bash', command })
-    if (expected === PASS) expect(out.text).toBe('ran')
-    else expect(out.deny).toContain(expected)
-  })
-}
+bashRowTests(BASH_ROWS, setup, (deny, fragment) => expect(deny).toContain(fragment))
 
 test('when the file check fails, an extension match in Bash still blocks', async ($, on) => {
   mock.store(on)

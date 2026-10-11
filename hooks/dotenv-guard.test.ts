@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { bashRowTests, PASS } from './bash-rows'
+import type { Row } from './bash-rows'
 
 const FILE_BLOCKED = [
   ['Read', '/project/.env'],
@@ -20,8 +22,6 @@ const FILE_ALLOWED = [
  * expected is the path the deny message names when the guard denies, or PASS when it lets the command run.
  * A regression is one more row.
  */
-const PASS = null
-type Row = [command: string, expected: string | typeof PASS]
 const BASH_ROWS: Row[] = [
   // Real access to the env file: denied.
   ['cat .env', '.env'],
@@ -104,15 +104,14 @@ for (const [tool, file_path] of FILE_ALLOWED) {
   })
 }
 
-for (const [command, expected] of BASH_ROWS) {
-  test(`${expected === PASS ? 'passes' : 'denies'} bash: ${JSON.stringify(command)}`, async ($, on) => {
+bashRowTests(
+  BASH_ROWS,
+  (_, on) => {
     mock.store(on)
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
-    const out = await $.tool.call({ tool: 'Bash', command })
-    if (expected === PASS) expect(out.text).toBe('ran')
-    else expect(out.deny).toContain(`Access to ${expected} is blocked`)
-  })
-}
+  },
+  (deny, word) => expect(deny).toBe(`Access to ${word} is blocked — .env files may contain secrets. Read .env.example instead.`),
+)
 
 for (const path of ['/project/.env', '/project/.env.local']) {
   test(`blocks: Grep path ${path}`, async ($, on) => {

@@ -1,4 +1,5 @@
-import { basename, simpleCommands } from './bash-text-rules'
+import { basename } from './bash-parser'
+import { simpleCommands } from './bash-text-rules'
 import type { ShellCommand } from './bash-text-rules'
 
 export const DOTENV_FILE_TOOLS = ['Read', 'Edit', 'Write', 'MultiEdit'] as const

@@ -233,3 +233,6 @@ function skipBalanced(command: string, start: number, open: string, close: strin
   }
   throw new Unparsable()
 }
+
+/** The part after the last `/`, ignoring trailing slashes. */
+export const basename = (value: string) => value.split('/').filter(Boolean).pop() ?? ''

@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { bashRowTests, PASS } from './bash-rows'
+import type { Row } from './bash-rows'
 
 const CWD = '/work/proj'
 
@@ -7,8 +9,6 @@ const CWD = '/work/proj'
  * expected is the command the deny message quotes when the guard denies, or PASS when it lets the command run.
  * A regression is one more row.
  */
-const PASS = null
-type Row = [command: string, expected: string | typeof PASS]
 const BASH_ROWS: Row[] = [
   // Denied.
   ['rm -rf /', 'rm -rf /'],
@@ -51,17 +51,10 @@ function setup($: any, on: any) {
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
 }
 
-for (const [command, expected] of BASH_ROWS) {
-  test(`${expected === PASS ? 'passes' : 'denies'} bash: ${JSON.stringify(command)}`, async ($, on) => {
-    setup($, on)
-    const out = await $.tool.call({ tool: 'Bash', command })
-    if (expected === PASS) expect(out.text).toBe('ran')
-    else {
-      expect(out.deny).toContain(`BLOCKED: '${expected}' matches dangerous pattern '`)
-      expect(out.deny).toContain("'. The user has prevented you from doing this.")
-    }
-  })
-}
+bashRowTests(BASH_ROWS, setup, (deny, command) => {
+  expect(deny).toContain(`BLOCKED: '${command}' matches dangerous pattern '`)
+  expect(deny).toContain("'. The user has prevented you from doing this.")
+})
 
 test('an error inside the hook denies the call', async ($, on) => {
   // No store mocked: reading the toggles fails inside every Bash guard.
