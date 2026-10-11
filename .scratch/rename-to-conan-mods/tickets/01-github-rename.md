@@ -10,11 +10,11 @@
 
 **Blocked by:** None (can start immediately)
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] Usuário confirmou o rename e a edição antes de rodar
-- [ ] `gh repo view C0nanT/conan-mods` mostra o repo
-- [ ] Descrição nova cita guards (git, `.env`, segredos, `rm`), caveman, som e status line, sem falar em `settings.json`
-- [ ] Topics `claude-code`, `claude-code-plugin` e `mods` presentes
-- [ ] `git remote -v` do clone aponta para `C0nanT/conan-mods`
-- [ ] `github.com/C0nanT/claude-hooks` redireciona para o repo novo
+- [x] Usuário confirmou o rename e a edição antes de rodar
+- [x] `gh repo view C0nanT/conan-mods` mostra o repo
+- [x] Descrição nova cita guards (git, `.env`, segredos, `rm`), caveman, som e status line, sem falar em `settings.json`
+- [x] Topics `claude-code`, `claude-code-plugin` e `mods` presentes
+- [x] `git remote -v` do clone aponta para `C0nanT/conan-mods`
+- [x] `github.com/C0nanT/claude-hooks` redireciona para o repo novo
