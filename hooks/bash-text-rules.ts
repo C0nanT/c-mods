@@ -16,6 +16,8 @@ type Word = {
   isQuoted: boolean
   /** True when the word holds a command substitution, which runs whatever command it holds. */
   runsCode: boolean
+  /** True when the word holds an unquoted `*`, `?` or `[`, which the shell may expand to file names. */
+  hasGlob: boolean
   isRedirectTarget: boolean
 }
 
@@ -38,7 +40,7 @@ type SimpleCommand = { words: Word[]; heredocs: Heredoc[] }
 class Unparsable extends Error {}
 
 /** Programs that run text they are given: their heredocs and quoted words are analysed as commands. */
-const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', '.', 'ssh', 'su']
+const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', 'ssh', 'su']
 /** Programs whose heredoc body is inert, besides the interpreters and `git commit`. */
 const HEREDOC_READERS = ['cat', 'tee']
 /** Programs that may follow an inert span in a pipeline: they print or count text, never run it. */
@@ -150,6 +152,7 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
   let value = ''
   let isQuoted = false
   let runsCode = false
+  let hasGlob = false
   let i = start
   while (i < command.length) {
     const char = command.charAt(i)
@@ -197,10 +200,11 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
       i = expansion.end
     } else {
       value += char
+      hasGlob ||= '*?['.includes(char)
       i++
     }
   }
-  return { start, end: i, value, isQuoted, runsCode }
+  return { start, end: i, value, isQuoted, runsCode, hasGlob }
 }
 
 /** A `$`, `${...}`, `$(...)` or backtick expansion starting at `start`. */
@@ -253,18 +257,26 @@ function skipBalanced(command: string, start: number, open: string, close: strin
 const programIndex = (words: readonly string[]) =>
   words.findIndex(word => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) && !WRAPPERS.includes(word))
 
-const basename = (value: string) => value.split('/').pop() ?? ''
+/** The part after the last `/`, ignoring trailing slashes. */
+export const basename = (value: string) => value.split('/').filter(Boolean).pop() ?? ''
 
+/** True when any word names a shell, or the program is `.` (as an argument, `.` is the current directory). */
 function isShell(command: SimpleCommand): boolean {
-  return command.words.some(word => SHELLS.includes(basename(word.value)))
+  return programOf(command)?.name === '.' || command.words.some(word => SHELLS.includes(basename(word.value)))
 }
 
-/** The program and its arguments, past `VAR=x` assignments, wrappers such as `sudo`, and redirect targets. */
-function programOf(command: SimpleCommand): { name: string; args: Word[] } | undefined {
+/** A command's words split around the program, past `VAR=x` assignments and wrappers such as `sudo`; redirect targets left out. */
+function splitAtProgram(command: SimpleCommand): { prefix: Word[]; program: Word | undefined; args: Word[] } {
   const words = command.words.filter(word => !word.isRedirectTarget)
-  const start = programIndex(words.map(word => word.value))
-  const program = words[start]
-  return program === undefined ? undefined : { name: basename(program.value), args: words.slice(start + 1) }
+  const found = programIndex(words.map(word => word.value))
+  const start = found === -1 ? words.length : found
+  return { prefix: words.slice(0, start), program: words[start], args: words.slice(start + 1) }
+}
+
+/** The program's base name and its arguments; undefined when the command has no program. */
+function programOf(command: SimpleCommand): { name: string; args: Word[] } | undefined {
+  const { program, args } = splitAtProgram(command)
+  return program === undefined ? undefined : { name: basename(program.value), args }
 }
 
 function interpreterCode(flags: readonly string[], args: readonly Word[]): Word[] {
@@ -368,6 +380,8 @@ export type ShellCommand = {
   program: string | undefined
   args: string[]
   redirects: string[]
+  /** The words, from any of the above, that hold an unquoted wildcard the shell may expand. */
+  globs: string[]
 }
 
 /**
@@ -402,13 +416,13 @@ function commandsOf(command: string): ShellCommand[] {
 }
 
 function shellCommand(command: SimpleCommand): ShellCommand {
-  const words = command.words.filter(word => !word.isRedirectTarget).map(word => word.value)
-  const found = programIndex(words)
-  const start = found === -1 ? words.length : found
+  const { prefix, program, args } = splitAtProgram(command)
+  const values = (words: readonly Word[]) => words.map(word => word.value)
   return {
-    prefix: words.slice(0, start),
-    program: words[start],
-    args: words.slice(start + 1),
-    redirects: command.words.filter(word => word.isRedirectTarget).map(word => word.value),
+    prefix: values(prefix),
+    program: program?.value,
+    args: values(args),
+    redirects: values(command.words.filter(word => word.isRedirectTarget)),
+    globs: values(command.words.filter(word => word.hasGlob)),
   }
 }

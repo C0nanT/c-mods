@@ -30,6 +30,7 @@ const BASH_BLOCKED: [string, string][] = [
   ['ENV_FILE=backend/.env.local ./run', 'backend/.env.local'],
   ['wc -l < .env', '.env'],
   ['cat .env*', '.env*'],
+  ['cat ".env"*', '.env*'],
   ['grep X backend/.env.*', 'backend/.env.*'],
   ['echo "$(cat .env)"', '.env'],
   ["sh -c 'cat .env'", '.env'],
@@ -56,6 +57,10 @@ const BASH_ALLOWED = [
   'grep -rn "import.meta.env" src',
   'grep -rn "import.meta.env" front-end/src',
   'grep "process.env.API_URL" -r .',
+  // `.` as an argument (the current directory) is not a shell, so quoted words stay arguments.
+  'grep -rn "\\.env" .',
+  'grep -r "\\.env" . | head',
+  'find . -name ".env*"',
   'grep -n "\\.env" SKILL.md',
   'grep -n "gitignore\\|\\.env" SKILL.md',
   "printf '/.env\\n' >> .gitignore",
