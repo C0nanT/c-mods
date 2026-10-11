@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { bashRowTests, PASS } from './bash-rows'
+import type { Row } from './bash-rows'
 
 const FILE_BLOCKED = [
   ['Read', '/project/.env'],
@@ -15,8 +17,13 @@ const FILE_ALLOWED = [
   ['Read', '/project/.env.dist'],
   ['Read', '/project/.env.template'],
 ]
-// [command, the word the deny message names]
-const BASH_BLOCKED: [string, string][] = [
+/**
+ * One row per Bash command: [command, expected].
+ * expected is the path the deny message names when the guard denies, or PASS when it lets the command run.
+ * A regression is one more row.
+ */
+const BASH_ROWS: Row[] = [
+  // Real access to the env file: denied.
   ['cat .env', '.env'],
   ['cat ../.env', '../.env'],
   ['cat /app/.env', '/app/.env'],
@@ -29,54 +36,53 @@ const BASH_BLOCKED: [string, string][] = [
   ['node --env-file=.env app.js', '.env'],
   ['ENV_FILE=backend/.env.local ./run', 'backend/.env.local'],
   ['wc -l < .env', '.env'],
-  ['cat .env*', '.env*'],
-  ['cat ".env"*', '.env*'],
-  ['grep X backend/.env.*', 'backend/.env.*'],
-  ['echo "$(cat .env)"', '.env'],
-  ["sh -c 'cat .env'", '.env'],
-  ['bash <<EOF\ncat ../.env\nEOF', '../.env'],
-  // Unparsable (unclosed quote): split on whitespace and punctuation.
-  ["cat .env 'unclosed", '.env'],
-  // Real accesses from the transcript history.
   ['cat .env | grep DATABASE_URL', '.env'],
   ['grep -E "^POSTGRES" .env', '.env'],
   ['cp .env .baseline-wt/.env', '.env'],
-  // Existence-check programs only exempt their own arguments.
+  ['echo "$(cat .env)"', '.env'],
+  ["sh -c 'cat .env'", '.env'],
+  ['bash <<EOF\ncat ../.env\nEOF', '../.env'],
+  // Wildcards that may expand to the env file: denied.
+  ['cat .env*', '.env*'],
+  ['cat ".env"*', '.env*'],
+  ['grep X backend/.env.*', 'backend/.env.*'],
+  // Unparsable (unclosed quote): split on whitespace and punctuation.
+  ["cat .env 'unclosed", '.env'],
+  ["echo 'unclosed quote with no env file", PASS],
+  // Fix: existence-check programs only exempt their own arguments.
   ['ls .env && cat .env', '.env'],
   ['ls > .env', '.env'],
   ['[ -f .env ] && source .env', '.env'],
-]
-const BASH_ALLOWED = [
-  'cat .env.example',
-  'cat .env.sample',
-  'cat .env.dist',
-  'cat .env.template',
-  'echo .env.example',
-  'grep KEY .env.example',
-  // Mentions that the transcript history shows were wrongly blocked.
-  'grep -rn "import.meta.env" src',
-  'grep -rn "import.meta.env" front-end/src',
-  'grep "process.env.API_URL" -r .',
-  // `.` as an argument (the current directory) is not a shell, so quoted words stay arguments.
-  'grep -rn "\\.env" .',
-  'grep -r "\\.env" . | head',
-  'find . -name ".env*"',
-  'grep -n "\\.env" SKILL.md',
-  'grep -n "gitignore\\|\\.env" SKILL.md',
-  "printf '/.env\\n' >> .gitignore",
-  'gh repo edit --description "guards for git, .env, secrets"',
-  'echo "copy .env.example to .env"',
-  'echo "remember to copy .env.example to .env"',
-  "echo 'unclosed quote with no env file",
-  // Existence checks.
-  'test -e .env',
-  '[ -f .env ] && echo exists',
-  'ls .env*',
-  'ls -la .env',
+  ['test -e .env', PASS],
+  ['[ -f .env ] && echo exists', PASS],
+  ['ls .env*', PASS],
+  ['ls -la .env', PASS],
+  // Fix: `.` as an argument (the current directory) is not a shell, so quoted words stay arguments.
+  ['grep -rn "\\.env" .', PASS],
+  ['grep -r "\\.env" . | head', PASS],
+  ['grep "process.env.API_URL" -r .', PASS],
+  ['find . -name ".env*"', PASS],
+  // Fix: a quoted wildcard or pattern is a literal word, not an expansion.
+  ['grep -n "\\.env" SKILL.md', PASS],
+  ['grep -n "gitignore\\|\\.env" SKILL.md', PASS],
+  // Safe variants.
+  ['cat .env.example', PASS],
+  ['cat .env.sample', PASS],
+  ['cat .env.dist', PASS],
+  ['cat .env.template', PASS],
+  ['echo .env.example', PASS],
+  ['grep KEY .env.example', PASS],
+  // Mentions only: .env named in text, not read.
+  ['grep -rn "import.meta.env" src', PASS],
+  ['grep -rn "import.meta.env" front-end/src', PASS],
+  ["printf '/.env\\n' >> .gitignore", PASS],
+  ['gh repo edit --description "guards for git, .env, secrets"', PASS],
+  ['echo "copy .env.example to .env"', PASS],
+  ['echo "remember to copy .env.example to .env"', PASS],
   // Inert text: heredoc bodies, commit messages, inline interpreter code.
-  "cat > notes.md <<'EOF'\ncat .env\nEOF",
-  'git commit -m "stop cat .env"',
-  "python3 -c 'open(\".env\")'",
+  ["cat > notes.md <<'EOF'\ncat .env\nEOF", PASS],
+  ['git commit -m "stop cat .env"', PASS],
+  ["python3 -c 'open(\".env\")'", PASS],
 ]
 
 for (const [tool, file_path] of FILE_BLOCKED) {
@@ -98,22 +104,14 @@ for (const [tool, file_path] of FILE_ALLOWED) {
   })
 }
 
-for (const [command, word] of BASH_BLOCKED) {
-  test(`blocks bash: ${JSON.stringify(command)}`, async ($, on) => {
+bashRowTests(
+  BASH_ROWS,
+  (_, on) => {
     mock.store(on)
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
-    const out = await $.tool.call({ tool: 'Bash', command })
-    expect(out.deny).toBe(`Access to ${word} is blocked — .env files may contain secrets. Read .env.example instead.`)
-  })
-}
-
-for (const command of BASH_ALLOWED) {
-  test(`allows bash: ${JSON.stringify(command)}`, async ($, on) => {
-    mock.store(on)
-    on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
-    expect((await $.tool.call({ tool: 'Bash', command })).text).toBe('ran')
-  })
-}
+  },
+  (deny, word) => expect(deny).toBe(`Access to ${word} is blocked — .env files may contain secrets. Read .env.example instead.`),
+)
 
 for (const path of ['/project/.env', '/project/.env.local']) {
   test(`blocks: Grep path ${path}`, async ($, on) => {

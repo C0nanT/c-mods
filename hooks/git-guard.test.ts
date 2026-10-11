@@ -1,64 +1,63 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { bashRowTests, PASS } from './bash-rows'
+import type { Row } from './bash-rows'
 
-const BLOCKED = [
-  'git push origin main',
-  'git push --force origin main',
-  'git reset --hard HEAD~1',
-  'git clean -fd',
-  'git clean -f',
-  'git branch -D feature',
-  'git checkout .',
-  'git restore .',
-  'git rm -rf file',
-  'git checkout -f .',
-  'git restore --worktree -- .',
-  'git restore . && git status',
-  'git -C /tmp push origin main',
-  'git --no-pager reset --hard HEAD~1',
-  'git --git-dir=/repo/.git push',
-  'git -c user.name=y push',
+/**
+ * One row per Bash command: [command, expected].
+ * expected is the command the deny message quotes when the guard denies, or PASS when it lets the command run.
+ * A regression is one more row.
+ */
+const BASH_ROWS: Row[] = [
+  // Denied.
+  ['git push origin main', 'git push origin main'],
+  ['git push --force origin main', 'git push --force origin main'],
+  ['git reset --hard HEAD~1', 'git reset --hard HEAD~1'],
+  ['git clean -fd', 'git clean -fd'],
+  ['git clean -f', 'git clean -f'],
+  ['git branch -D feature', 'git branch -D feature'],
+  ['git checkout .', 'git checkout .'],
+  ['git restore .', 'git restore .'],
+  ['git rm -rf file', 'git rm -rf file'],
+  ['git checkout -f .', 'git checkout -f .'],
+  ['git restore --worktree -- .', 'git restore --worktree -- .'],
+  ['git restore . && git status', 'git restore . && git status'],
+  ['git -C /tmp push origin main', 'git -C /tmp push origin main'],
+  ['git --no-pager reset --hard HEAD~1', 'git --no-pager reset --hard HEAD~1'],
+  ['git --git-dir=/repo/.git push', 'git --git-dir=/repo/.git push'],
+  ['git -c user.name=y push', 'git -c user.name=y push'],
+  // Allowed.
+  ['git commit -m x', PASS],
+  ['git -c user.email=x -c user.name=y commit -m x', PASS],
+  ['git -C /tmp commit -m x', PASS],
+  ["grep -rn 'git commit' .", PASS],
+  ['git rm --cached dist/bundle.js', PASS],
+  ['git restore .env.example', PASS],
+  ['git restore ./src/a.ts', PASS],
+  ['git checkout .github/workflows/ci.yml', PASS],
+  ['git restore --source=abc123 --worktree -- src/a.ts', PASS],
+  ['git switch -C feature main', PASS],
+  ['git worktree add -b feature ../wt main', PASS],
+  ['git branch -d feature', PASS],
+  ['git stash create', PASS],
+  ['git reset --soft HEAD~1', PASS],
+  ['git rebase main', PASS],
+  ['git status', PASS],
+  ['git -C /tmp status', PASS],
+  ['git --no-pager log', PASS],
+  ['git diff', PASS],
 ]
 
-const ALLOWED = [
-  'git commit -m x',
-  'git -c user.email=x -c user.name=y commit -m x',
-  'git -C /tmp commit -m x',
-  "grep -rn 'git commit' .",
-  'git rm --cached dist/bundle.js',
-  'git restore .env.example',
-  'git restore ./src/a.ts',
-  'git checkout .github/workflows/ci.yml',
-  'git restore --source=abc123 --worktree -- src/a.ts',
-  'git switch -C feature main',
-  'git worktree add -b feature ../wt main',
-  'git branch -d feature',
-  'git stash create',
-  'git reset --soft HEAD~1',
-  'git rebase main',
-  'git status',
-  'git -C /tmp status',
-  'git --no-pager log',
-  'git diff',
-]
-
-for (const command of BLOCKED) {
-  test(`blocks: ${command}`, async ($, on) => {
+bashRowTests(
+  BASH_ROWS,
+  (_, on) => {
     mock.store(on)
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
-    const out = await $.tool.call({ tool: 'Bash', command })
-    expect(out.deny).toContain(`BLOCKED: '${command}' matches dangerous pattern '`)
-    expect(out.deny).toContain("'. The user has prevented you from doing this.")
-  })
-}
-
-for (const command of ALLOWED) {
-  test(`allows: ${command}`, async ($, on) => {
-    mock.store(on)
-    on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
-    const out = await $.tool.call({ tool: 'Bash', command })
-    expect(out.text).toBe('ran')
-  })
-}
+  },
+  (deny, command) => {
+    expect(deny).toContain(`BLOCKED: '${command}' matches dangerous pattern '`)
+    expect(deny).toContain("'. The user has prevented you from doing this.")
+  },
+)
 
 test('allows: a non-Bash tool whose input mentions a dangerous command', async ($, on) => {
   mock.store(on)

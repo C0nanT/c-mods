@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { bashRowTests, PASS } from './bash-rows'
+import type { Row } from './bash-rows'
 
 const HOME = '/home/test'
 const FILE_BLOCKED = [
@@ -17,23 +19,28 @@ const FILE_ALLOWED = [
   `${HOME}/.ssh/id_ed25519.pub`,
   '/project/README.md',
 ]
-const BASH_BLOCKED = [
-  'cat ~/.ssh/id_rsa',
-  'cat $HOME/.aws/credentials',
-  'cat ${HOME}/.ssh/id_ed25519',
-  `cat ${HOME}/.npmrc`,
-  'cp server.pem /tmp/x',
-  'cat certs/app.key',
-  'echo hi && cat "$HOME/.ssh/id_rsa"',
-]
-const BASH_ALLOWED = [
-  'cat ~/.ssh/known_hosts',
-  'ls ~/.ssh',
-  'cat ~/.ssh/id_ed25519.pub',
-  'echo hello',
+/**
+ * One row per Bash command: [command, expected].
+ * expected is a fragment of the deny message when the guard denies, or PASS when it lets the command run.
+ * A regression is one more row.
+ */
+const BASH_ROWS: Row[] = [
+  // Denied.
+  ['cat ~/.ssh/id_rsa', 'matches secret rule'],
+  ['cat $HOME/.aws/credentials', 'matches secret rule'],
+  ['cat ${HOME}/.ssh/id_ed25519', 'matches secret rule'],
+  [`cat ${HOME}/.npmrc`, 'matches secret rule'],
+  ['cp server.pem /tmp/x', 'matches secret rule'],
+  ['cat certs/app.key', 'matches secret rule'],
+  ['echo hi && cat "$HOME/.ssh/id_rsa"', 'matches secret rule'],
+  // Allowed.
+  ['cat ~/.ssh/known_hosts', PASS],
+  ['ls ~/.ssh', PASS],
+  ['cat ~/.ssh/id_ed25519.pub', PASS],
+  ['echo hello', PASS],
   // Extension rules block in Bash only when the file exists: code like `row.key` passes.
-  "node -e 'rows.map(row => row.key)'",
-  'cat missing.pem',
+  ["node -e 'rows.map(row => row.key)'", PASS],
+  ['cat missing.pem', PASS],
 ]
 const CWD = '/project'
 const EXISTING = [`${CWD}/server.pem`, `${CWD}/certs/app.key`]
@@ -63,19 +70,7 @@ for (const file_path of FILE_ALLOWED) {
   })
 }
 
-for (const command of BASH_BLOCKED) {
-  test(`blocks bash: ${command}`, async ($, on) => {
-    await setup($, on)
-    expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('matches secret rule')
-  })
-}
-
-for (const command of BASH_ALLOWED) {
-  test(`allows bash: ${command}`, async ($, on) => {
-    await setup($, on)
-    expect((await $.tool.call({ tool: 'Bash', command })).text).toBe('ran')
-  })
-}
+bashRowTests(BASH_ROWS, setup, (deny, fragment) => expect(deny).toContain(fragment))
 
 test('when the file check fails, an extension match in Bash still blocks', async ($, on) => {
   mock.store(on)
