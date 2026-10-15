@@ -1,4 +1,4 @@
-# Migrating a PC to the `conan-mods` plugin
+# Migrating a PC to the `c-mods` plugin
 
 Run this on every PC that had the old `@c0nant/claude-hooks` hooks. It takes a
 couple of minutes and is safe to repeat.
@@ -8,7 +8,7 @@ couple of minutes and is safe to repeat.
 - Node ≥18 and `jq` (Ubuntu/WSL: `sudo apt-get install -y jq`).
 - **Always pin `@0.4.0`.** `0.3.0` and older are the *old installer*: their
   `uninstall` ignores `--dry-run` and removes **every** `claude-hook:` hook,
-  including `statusline-reset` from C0nanT/skills. `@latest` can still resolve
+  including `statusline-reset` from C0nanT/c-skills. `@latest` can still resolve
   to an old version through the npx cache or registry lag.
 - Run the commands **one at a time**. Pasting the dry-run and the real cleanup
   together runs both before you can read the report.
@@ -78,34 +78,34 @@ Run it a second time if you want proof: everything reads `does not exist`.
 Inside Claude Code:
 
 ```
-/plugin install conan-mods --marketplace C0nanT/conan-mods
+/plugin install c-mods --marketplace C0nanT/c-mods
 ```
 
 The `caveman` function reads `~/.claude/skills/caveman/SKILL.md`. If
 `ls ~/.claude/skills/caveman/SKILL.md` fails, install the skills first:
-`npx skills@latest add C0nanT/skills`.
+`npx skills@latest add C0nanT/c-skills`.
 
 ## Coming from the `claude-hooks` marketplace
 
 Skip this if you never installed the plugin through the marketplace named
-`claude-hooks`. Otherwise swap it for `conan-mods`, in Claude Code:
+`claude-hooks`. Otherwise swap it for `c-mods`, in Claude Code:
 
-1. `/plugin uninstall conan-mods@claude-hooks`
+1. `/plugin uninstall c-mods@claude-hooks`
 2. `/plugin marketplace remove claude-hooks`
-3. `/plugin marketplace add C0nanT/conan-mods`
-4. `/plugin install conan-mods@conan-mods` (user scope, the default)
+3. `/plugin marketplace add C0nanT/c-mods`
+4. `/plugin install c-mods@c-mods` (user scope, the default)
 5. `/reload-plugins`
 
-Same from a shell: `claude plugin uninstall conan-mods@claude-hooks`,
+Same from a shell: `claude plugin uninstall c-mods@claude-hooks`,
 `claude plugin marketplace remove claude-hooks`,
-`claude plugin marketplace add C0nanT/conan-mods`,
-`claude plugin install conan-mods@conan-mods --scope user`.
+`claude plugin marketplace add C0nanT/c-mods`,
+`claude plugin install c-mods@c-mods --scope user`.
 
 ## 5. Check the plugin works
 
 In a new Claude Code session:
 
-- [ ] `/conan-mods` lists `caveman`, `git-guard`, `dotenv-guard` and `sound`,
+- [ ] `/c-mods` lists `caveman`, `git-guard`, `dotenv-guard` and `sound`,
       all `on`.
 - [ ] **git-guard:** in any repo, ask Claude to run `git push --dry-run`. The
       call is denied with `BLOCKED: 'git push --dry-run' matches dangerous pattern …`.
@@ -118,10 +118,10 @@ In a new Claude Code session:
       from Windows on WSL, the system "complete" sound on Ubuntu. Two sounds
       mean an old hook or the `claude-notification` plugin survived: rerun
       step 3.
-- [ ] **Off band:** `/conan-mods sound off` shows `⚠ off: sound` above the
-      prompt right away. `/conan-mods sound on` removes it.
+- [ ] **Off band:** `/c-mods sound off` shows `⚠ off: sound` above the
+      prompt right away. `/c-mods sound on` removes it.
 
-Updating later: `claude plugin update conan-mods`, then `/reload-plugins` in
+Updating later: `claude plugin update c-mods`, then `/reload-plugins` in
 open sessions.
 
 ## Recovery: an old version (≤0.3.0) ran `uninstall`

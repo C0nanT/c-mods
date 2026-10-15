@@ -3,16 +3,16 @@ import { expect, mock, test } from 'claude-code/testing'
 const NAMES = ['caveman', 'git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard', 'sound', 'statusline', 'statusline-color']
 
 async function hooks($: any, args = '') {
-  return $.command.run({ command: 'conan-mods', args })
+  return $.command.run({ command: 'c-mods', args })
 }
 
-test('/conan-mods lists the four names, all on, on a fresh install', async ($, on) => {
+test('/c-mods lists the four names, all on, on a fresh install', async ($, on) => {
   mock.store(on)
   const out = await hooks($)
   for (const name of NAMES) expect(out.text).toContain(`${name}: on`)
 })
 
-test('/conan-mods git-guard off lets git push pass, on blocks again', async ($, on) => {
+test('/c-mods git-guard off lets git push pass, on blocks again', async ($, on) => {
   mock.store(on)
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   expect((await hooks($, 'git-guard off')).text).toBe('git-guard: off')
@@ -25,7 +25,7 @@ for (const args of ['nope on', 'git-guard maybe', 'git-guard', 'git-guard on ext
   test(`invalid input '${args}' answers usage and changes nothing`, async ($, on) => {
   mock.store(on)
     const out = await hooks($, args)
-    expect(out.text).toContain('Usage: /conan-mods')
+    expect(out.text).toContain('Usage: /c-mods')
     for (const name of NAMES) expect(out.text).toContain(name)
     expect((await hooks($)).text).not.toContain('off')
   })
@@ -43,7 +43,7 @@ test('a stored off survives into a new session', async ($, on) => {
 // `$.command.register` refuses a built-in's name by throwing, which skips the session.start hook.
 const BUILT_INS = ['hooks', 'help', 'clear']
 
-test('session.start registers /conan-mods and the hook is not skipped', async ($, on) => {
+test('session.start registers /c-mods and the hook is not skipped', async ($, on) => {
   mock.store(on)
   const registered: string[] = []
   on('command.register', (_$, e) => {
@@ -59,5 +59,5 @@ test('session.start registers /conan-mods and the hook is not skipped', async ($
   })
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   expect(reached).toBe(true)
-  expect(registered).toContain('conan-mods')
+  expect(registered).toContain('c-mods')
 })

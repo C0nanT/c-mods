@@ -30,9 +30,9 @@ change ships as a patch, minor, or major release.
 
 ```
 fix: block "git rm" pattern with word boundary
-feat: add sound toggle to /conan-mods
+feat: add sound toggle to /c-mods
 feat(git-guard): cover git switch --discard-changes
-feat!: rename the /conan-mods command
+feat!: rename the /c-mods command
 
 BREAKING CHANGE: muscle memory and docs must use the new command name
 ```

@@ -1,11 +1,11 @@
-# `conan-mods`
+# `c-mods`
 
 A Claude Code plugin (a mod: TypeScript hooks that run inside Claude Code) with
 eight functions:
 
 | Function | What it does |
 |---|---|
-| `caveman` | Adds `~/.claude/skills/caveman/SKILL.md` to the session instructions. If the skill is missing, warns once per session with `npx skills@latest add C0nanT/skills`. |
+| `caveman` | Adds `~/.claude/skills/caveman/SKILL.md` to the session instructions. If the skill is missing, warns once per session with `npx skills@latest add C0nanT/c-skills`. |
 | `git-guard` | Blocks destructive git commands (`push`, `reset --hard`, `clean -f`, `branch -D`, `checkout .`, `restore .`, `rm`), even with global options before the subcommand. Only a lone `.` counts for `checkout`/`restore` (`restore .env.example` passes), and `rm --cached`, `reset --soft`, `rebase`, `switch`, `worktree` and `branch -d` pass. |
 | `dotenv-guard` | Blocks reading or editing `.env` / `.env.*` through Read, Edit, Write, MultiEdit and Bash, and Grep by its `path` (never its pattern). In Bash it blocks only words that are `.env` paths (`cat ../.env`, `--env-file=.env`, `< .env`, `.env*`), so text that only mentions `.env` (`"import.meta.env"`, `"\.env"`, a description) passes, and so do existence checks (`test -e .env`, `[ -f .env ]`, `ls .env*`; redirects on them are still checked). `.env.example`, `.env.sample`, `.env.dist` and `.env.template` stay allowed. |
 | `secret-guard` | Blocks reading or editing credential files through Read, Edit, Write, MultiEdit and Bash: `~/.ssh/*` (except `known_hosts`, `config` and `*.pub`), `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519`, `~/.aws/credentials`, `~/.config/gcloud/`, `~/.azure/`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `~/.docker/config.json` and `~/.config/gh/hosts.yml`. When HOME is missing or unreadable, the home-anchored rules cannot be checked, so paths starting with `~` or `$HOME` (and absolute paths under those directories) are blocked. In Bash the extension rules block only a file that exists, so code such as `row.key` passes; if the check fails, the command is blocked. |
@@ -21,7 +21,7 @@ The four Bash guards (`git-guard`, `dotenv-guard`, `secret-guard`, `rm-guard`) c
 Inside Claude Code:
 
 ```
-/plugin install conan-mods --marketplace C0nanT/conan-mods
+/plugin install c-mods --marketplace C0nanT/c-mods
 ```
 
 Install it in the user (global) scope. It needs no npm, `jq` or `settings.json`
@@ -33,22 +33,22 @@ hooks run twice alongside the plugin. See [MIGRATING.md](MIGRATING.md).
 ## Update
 
 ```bash
-claude plugin update conan-mods
+claude plugin update c-mods
 ```
 
 Then run `/reload-plugins` inside any open session.
 
-## `/conan-mods`
+## `/c-mods`
 
 Everything starts **on**. The choice persists across sessions on the same PC.
 
 ```
-/conan-mods                  # open the panel and list each function with on/off
-/conan-mods git-guard off    # switch one off, effective immediately
-/conan-mods git-guard on
+/c-mods                  # open the panel and list each function with on/off
+/c-mods git-guard off    # switch one off, effective immediately
+/c-mods git-guard on
 ```
 
-With no argument, `/conan-mods` opens a focused `conan-mods` pane with one row per function (name, state, a
+With no argument, `/c-mods` opens a focused `c-mods` pane with one row per function (name, state, a
 button). Pressing a button switches that function the same way the text command does, and the pane and the off band
 redraw at once. Esc closes the pane and returns the prompt. The reply still carries the `name: on|off` list, for the
 transcript and for places where the pane does not open.
@@ -82,7 +82,7 @@ It disappears when everything is back on.
 
 ```
 .claude-plugin/plugin.json        # plugin manifest (version is written by CI)
-.claude-plugin/marketplace.json   # marketplace with the single conan-mods entry
+.claude-plugin/marketplace.json   # marketplace with the single c-mods entry
 hooks/hooks.json                  # loads hooks/register.ts
 hooks/register.ts                 # wires every event to the modules below
 hooks/*-rules.ts, hooks/toggles.ts  # pure decision logic
@@ -100,7 +100,7 @@ claude plugin test .                  # runs hooks/*.test.ts
 ```
 
 To get `/reload-plugins` while editing, add the folder as a local marketplace:
-`claude plugin marketplace add .` then `/plugin install conan-mods`.
+`claude plugin marketplace add .` then `/plugin install c-mods`.
 
 ### Releasing
 

@@ -55,7 +55,7 @@ test('Ubuntu: falls back to aplay when paplay is missing, without breaking the s
 
 test('off: no command is called', async ($, on) => {
   const w = world(on)
-  await $.command.run({ command: 'conan-mods', args: 'sound off' })
+  await $.command.run({ command: 'c-mods', args: 'sound off' })
   await $.turn.complete(DONE)
   expect(w.calls).toEqual([])
 })
