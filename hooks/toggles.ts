@@ -7,7 +7,7 @@ export type ModsCommand =
   | { kind: 'set'; name: ToggleName; isOn: boolean }
   | { kind: 'usage' }
 
-/** Interprets the argument text of `/conan-mods`. */
+/** Interprets the argument text of `/c-mods`. */
 export function parseModsArgs(args: string): ModsCommand {
   const words = args.trim().split(/\s+/).filter(Boolean)
   if (words.length === 0) return { kind: 'list' }
@@ -18,7 +18,7 @@ export function parseModsArgs(args: string): ModsCommand {
 }
 
 export function usageText(): string {
-  return `Usage: /conan-mods [<name> on|off]\nValid names: ${TOGGLE_NAMES.join(', ')}`
+  return `Usage: /c-mods [<name> on|off]\nValid names: ${TOGGLE_NAMES.join(', ')}`
 }
 
 export function listText(toggles: Toggles): string {

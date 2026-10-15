@@ -65,11 +65,11 @@ test('an error inside the hook denies the call', async ($, on) => {
 
 test('rm-guard off lets everything pass, on blocks again', async ($, on) => {
   setup($, on)
-  expect(($ && (await $.command.run({ command: 'conan-mods', args: 'rm-guard off' }))).text).toBe('rm-guard: off')
+  expect(($ && (await $.command.run({ command: 'c-mods', args: 'rm-guard off' }))).text).toBe('rm-guard: off')
   expect((await $.tool.call({ tool: 'Bash', command: 'rm -rf ~' })).text).toBe('ran')
-  const band = await $.ui.mount({ plugin: 'conan-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })
+  const band = await $.ui.mount({ plugin: 'c-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })
   expect(await band.find({ type: 'Text', text: '⚠ off: rm-guard' })).toBeDefined()
   await band.unmount()
-  expect((await $.command.run({ command: 'conan-mods', args: 'rm-guard on' })).text).toBe('rm-guard: on')
+  expect((await $.command.run({ command: 'c-mods', args: 'rm-guard on' })).text).toBe('rm-guard: on')
   expect((await $.tool.call({ tool: 'Bash', command: 'rm -rf ~' })).deny).toContain('BLOCKED')
 })

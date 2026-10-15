@@ -182,19 +182,19 @@ test('the zone is resolved once per session', async ($, on) => {
 test('off clears the line at once and stops drawing; on draws again', async ($, on) => {
   const w = world(on, { rateLimits: [] })
   await $.session.measure(MEASURE)
-  await $.command.run({ command: 'conan-mods', args: 'statusline off' })
+  await $.command.run({ command: 'c-mods', args: 'statusline off' })
   expect(w.lines.at(-1)).toBeUndefined()
   const count = w.lines.length
   await $.session.measure(MEASURE)
   expect(w.lines).toHaveLength(count)
-  await $.command.run({ command: 'conan-mods', args: 'statusline on' })
+  await $.command.run({ command: 'c-mods', args: 'statusline on' })
   expect(w.lines.at(-1)).toBe('Opus · ctx:14% 28k · 23m')
 })
 
 const DEFAULT = 'engine default'
 
 async function band($: any) {
-  return $.ui.mount({ plugin: 'conan-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })
+  return $.ui.mount({ plugin: 'c-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })
 }
 
 test('statusline-color on draws the line in colour above the prompt and clears the plain line', async ($, on) => {
@@ -246,12 +246,12 @@ test('statusline-color off moves the line back under the prompt; on moves it up 
   const w = world(on, { stored: { 'statusline-color': true }, rateLimits: [] })
   on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Text', children: [DEFAULT] }))
   await $.session.measure(MEASURE)
-  await $.command.run({ command: 'conan-mods', args: 'statusline-color off' })
+  await $.command.run({ command: 'c-mods', args: 'statusline-color off' })
   expect(w.lines.at(-1)).toBe('Opus · ctx:14% 28k · 23m')
   let ui = await band($)
   expect(await ui.find({ type: 'Text', text: 'Opus' })).toBeUndefined()
   await ui.unmount()
-  await $.command.run({ command: 'conan-mods', args: 'statusline-color on' })
+  await $.command.run({ command: 'c-mods', args: 'statusline-color on' })
   expect(w.lines.at(-1)).toBeUndefined()
   ui = await band($)
   expect(await ui.find({ type: 'Text', text: 'Opus' })).toBeDefined()
@@ -262,7 +262,7 @@ test('statusline off clears the coloured line too', async ($, on) => {
   world(on, { stored: { 'statusline-color': true }, rateLimits: [] })
   on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Text', children: [DEFAULT] }))
   await $.session.measure(MEASURE)
-  await $.command.run({ command: 'conan-mods', args: 'statusline off' })
+  await $.command.run({ command: 'c-mods', args: 'statusline off' })
   const ui = await band($)
   expect(await ui.find({ type: 'Text', text: 'Opus' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: '⚠ off: statusline' })).toBeDefined()

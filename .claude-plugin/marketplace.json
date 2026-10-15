@@ -1,12 +1,12 @@
 {
-  "name": "conan-mods",
-  "description": "Marketplace for conan-mods, Conan's Claude Code plugin.",
+  "name": "c-mods",
+  "description": "Marketplace for c-mods, Conan's Claude Code plugin.",
   "owner": {
     "name": "C0nanT"
   },
   "plugins": [
     {
-      "name": "conan-mods",
+      "name": "c-mods",
       "source": "./",
       "version": "3.2.0"
     }

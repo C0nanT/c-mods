@@ -89,13 +89,13 @@ test('an error inside the hook denies the call', async ($, on) => {
   expect(out.deny).toContain('failed')
 })
 
-test('/conan-mods secret-guard off lets it pass, on blocks again, band shows it', async ($, on) => {
+test('/c-mods secret-guard off lets it pass, on blocks again, band shows it', async ($, on) => {
   await setup($, on)
-  const run = (args: string) => $.command.run({ command: 'conan-mods', args })
+  const run = (args: string) => $.command.run({ command: 'c-mods', args })
   expect((await run('secret-guard off')).text).toBe('secret-guard: off')
   expect((await $.tool.call({ tool: 'Read', file_path: `${HOME}/.ssh/id_rsa` })).text).toBe('ran')
   expect((await $.tool.call({ tool: 'Bash', command: 'cat ~/.ssh/id_rsa' })).text).toBe('ran')
-  const ui = await $.ui.mount({ plugin: 'conan-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })
+  const ui = await $.ui.mount({ plugin: 'c-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })
   expect(await ui.find({ type: 'Text', text: '⚠ off: secret-guard' })).toBeDefined()
   await ui.unmount()
   expect((await run('secret-guard on')).text).toBe('secret-guard: on')

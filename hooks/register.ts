@@ -11,8 +11,8 @@ import { listText, offBandText, parseModsArgs, TOGGLE_NAMES, usageText } from '.
 import type { ToggleName, Toggles } from './toggles'
 
 const EFFORT_POLL_MS = 2000
-const PANE_ID = 'conan-mods'
-const toggles = { plugin: 'conan-mods', key: 'toggles' } as const
+const PANE_ID = 'c-mods'
+const toggles = { plugin: 'c-mods', key: 'toggles' } as const
 
 // These helpers stay in this file: `$` is only followed into functions declared here.
 
@@ -55,7 +55,7 @@ function envPathDenial(path: unknown): { deny: string } | undefined {
   return typeof path === 'string' && path !== '' && isBlockedEnvPath(path) ? { deny: fileBlockedMessage(path) } : undefined
 }
 
-const CAVEMAN_WARNING = 'caveman: skill não encontrada, rode `npx skills@latest add C0nanT/skills`'
+const CAVEMAN_WARNING = 'caveman: skill não encontrada, rode `npx skills@latest add C0nanT/c-skills`'
 
 /** The skill's text, or undefined when it cannot be read (missing, unreadable or empty). */
 async function readCavemanSkill($: EngineInterface): Promise<string | undefined> {
@@ -261,10 +261,10 @@ async function playDone($: EngineInterface): Promise<void> {
 /** Opens the focused pane; when the engine refuses or defers it, a toast says why. The text list stays the answer either way. */
 async function openPane($: EngineInterface): Promise<void> {
   try {
-    const opened = await $.ui.open({ id: PANE_ID, title: 'conan-mods', focus: true, closeOnEscape: true })
-    if (!opened.isPlaced) $.ui.toast(`conan-mods pane is not shown yet: ${opened.reason}`)
+    const opened = await $.ui.open({ id: PANE_ID, title: 'c-mods', focus: true, closeOnEscape: true })
+    if (!opened.isPlaced) $.ui.toast(`c-mods pane is not shown yet: ${opened.reason}`)
   } catch (e) {
-    $.ui.toast(`conan-mods pane could not open: ${e instanceof Error ? e.message : String(e)}`)
+    $.ui.toast(`c-mods pane could not open: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -274,7 +274,7 @@ export const register: Register = on => {
   const statusLine: StatusLineState = { isTimezoneResolved: false, isSavedEffortSeen: false }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'conan-mods', description: 'List or switch the conan-mods functions', argumentHint: '[<name> on|off]' })
+    await $.command.register({ name: 'c-mods', description: 'List or switch the c-mods functions', argumentHint: '[<name> on|off]' })
     const result = await next(e)
     if ((await readToggles($)).statusline) await drawStatusLine($, statusLine)
     $.clock.every(EFFORT_POLL_MS, () => void pollEffort($, statusLine))
@@ -312,7 +312,7 @@ export const register: Register = on => {
     return yield* next(e)
   })
 
-  on('command.run', { command: 'conan-mods' }, async ($, e) => {
+  on('command.run', { command: 'c-mods' }, async ($, e) => {
     const command = parseModsArgs(e.args)
     if (command.kind === 'usage') return { text: usageText() }
     if (command.kind === 'list') {
@@ -415,7 +415,7 @@ export const register: Register = on => {
       }
       return result
     }
-    return { sections: [...result.sections, { id: 'conan-mods:caveman', text, scope: 'session' }] }
+    return { sections: [...result.sections, { id: 'c-mods:caveman', text, scope: 'session' }] }
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {

@@ -12,6 +12,6 @@ export type StoredToggles = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'conan-mods': { toggles: StoredToggles }
+    'c-mods': { toggles: StoredToggles }
   }
 }

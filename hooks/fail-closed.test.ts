@@ -49,11 +49,11 @@ for (const [guard, danger, message] of GUARDS) {
 test('git-guard: an error before next denies with the exact command message', async ($, on) => {
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   const out = await $.tool.call({ tool: 'Bash', command: 'ls' })
-  expect(out.deny).toBe('conan-mods: git-guard failed, command blocked.')
+  expect(out.deny).toBe('c-mods: git-guard failed, command blocked.')
 })
 
 test('dotenv-guard: an error before next denies with the exact call message', async ($, on) => {
   on('tool.call', { tool: 'Read' }, () => ({ result: 'ran', text: 'ran' }))
   const out = await $.tool.call({ tool: 'Read', file_path: '/project/a.txt' })
-  expect(out.deny).toBe('conan-mods: dotenv-guard failed, call blocked.')
+  expect(out.deny).toBe('c-mods: dotenv-guard failed, call blocked.')
 })
