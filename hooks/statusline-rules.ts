@@ -11,6 +11,8 @@ export type StatusLineFields = {
   /** IANA zone the reset time is drawn in; the process's own zone when absent. */
   timezone?: string
   branch?: string
+  /** The session's directory; only its last segment is shown. */
+  cwd?: string
 }
 
 /** `23m` under an hour, `1h05m` from there on. */
@@ -43,21 +45,29 @@ export function formatResetTime(iso: string, timezone: string | undefined): stri
 }
 
 /** What a segment shows, which picks its colour in the band. */
-export type StatusTone = 'model' | 'duration' | 'usage-low' | 'usage-mid' | 'usage-high' | 'branch'
+export type StatusTone = 'model' | 'model-haiku' | 'model-opus' | 'model-fable' | 'duration' | 'usage-low' | 'usage-mid' | 'usage-warn' | 'usage-high' | 'branch' | 'project'
 export type StatusSegment = { text: string; tone: StatusTone }
 
-/** Theme colours per tone; ctx and the rate limit go green under 50%, yellow to 79%, red from 80%. */
+/** Theme colours per tone; the model is green for Haiku, orange for Sonnet (and unknown), red for Opus and Fable; usage goes green, yellow, orange, then red as it climbs (thresholds in `USAGE_STEPS`). */
 export const TONE_COLORS: Record<StatusTone, string> = {
   model: 'claude',
+  'model-haiku': 'success',
+  'model-opus': 'error',
+  'model-fable': 'error',
   duration: 'subtle',
   'usage-low': 'success',
   'usage-mid': 'warning',
+  'usage-warn': 'claude',
   'usage-high': 'error',
   branch: 'merged',
+  project: 'suggestion',
 }
 
 /** The Nerd Font git-branch glyph, drawn before the branch; needs a Nerd Font in the terminal. */
 export const BRANCH_ICON = '\ue0a0'
+
+/** The warning sign drawn after the Fable model name. */
+export const DANGER_ICON = '\u26a0'
 
 
 /**
@@ -88,28 +98,57 @@ export function formatModel(model: string, effort: string | number | undefined):
   return effort === undefined ? name : `${name} - ${effort}`
 }
 
-/** The tone for a usage percentage, shared by ctx and the rate limit. */
-export function usageTone(percent: number): StatusTone {
-  if (percent < 50) return 'usage-low'
-  return percent < 80 ? 'usage-mid' : 'usage-high'
+/** The model's tone by family: Haiku green, Opus and Fable red, anything else (Sonnet included) the default orange. */
+export function modelTone(model: string): StatusTone {
+  const id = model.toLowerCase()
+  if (id.includes('haiku')) return 'model-haiku'
+  if (id.includes('opus')) return 'model-opus'
+  if (id.includes('fable')) return 'model-fable'
+  return 'model'
+}
+
+/** The folder name of a path, ignoring trailing slashes and Windows separators; undefined for an empty or root path. */
+export function projectName(cwd: string): string | undefined {
+  const name = cwd.split(/[\\/]+/).filter(part => part !== '').at(-1)
+  return name === undefined || name === '' ? undefined : name
+}
+
+/** Where usage turns yellow, orange and red; the context window runs out of room sooner than the rate limit does. */
+export const USAGE_STEPS = {
+  ctx: [50, 70, 85],
+  limit: [60, 80, 90],
+} as const
+
+/** The tone for a usage percentage of the context window or of the rate limit. */
+export function usageTone(percent: number, kind: keyof typeof USAGE_STEPS): StatusTone {
+  const [yellow, orange, red] = USAGE_STEPS[kind]
+  if (percent < yellow) return 'usage-low'
+  if (percent < orange) return 'usage-mid'
+  return percent < red ? 'usage-warn' : 'usage-high'
 }
 
 /** The segments, fields left to right; a field with no data is left out. */
 export function buildStatusSegments(fields: StatusLineFields): StatusSegment[] {
   const segments: StatusSegment[] = []
-  if (fields.model) segments.push({ text: formatModel(fields.model, fields.effort), tone: 'model' })
+  if (fields.model) {
+    const tone = modelTone(fields.model)
+    const text = formatModel(fields.model, fields.effort)
+    segments.push({ text: tone === 'model-fable' ? `${text} ${DANGER_ICON}` : text, tone })
+  }
   if (fields.contextPercent !== undefined) {
     const tokens = fields.contextTokens === undefined ? '' : ` ${formatTokens(fields.contextTokens)}`
     const percent = Math.round(fields.contextPercent)
-    segments.push({ text: `ctx:${percent}%${tokens}`, tone: usageTone(percent) })
+    segments.push({ text: `ctx:${percent}%${tokens}`, tone: usageTone(percent, 'ctx') })
   }
   if (fields.durationMs !== undefined) segments.push({ text: formatDuration(fields.durationMs), tone: 'duration' })
   if (fields.fiveHourPercent !== undefined) {
     const reset = fields.fiveHourResetsAt === undefined ? undefined : formatResetTime(fields.fiveHourResetsAt, fields.timezone)
     const percent = Math.round(fields.fiveHourPercent)
-    segments.push({ text: `limit:${percent}%${reset === undefined ? '' : ` ↺ ${reset}`}`, tone: usageTone(percent) })
+    segments.push({ text: `limit:${percent}%${reset === undefined ? '' : ` ↺ ${reset}`}`, tone: usageTone(percent, 'limit') })
   }
   if (fields.branch) segments.push({ text: `${BRANCH_ICON} ${fields.branch}`, tone: 'branch' })
+  const project = fields.cwd === undefined ? undefined : projectName(fields.cwd)
+  if (project !== undefined) segments.push({ text: `project: ${project}`, tone: 'project' })
   return segments
 }
 
