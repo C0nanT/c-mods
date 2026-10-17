@@ -5,7 +5,7 @@ const RESET = '2026-10-07T18:30:00Z'
 
 type World = { lines: (string | undefined)[]; clock: any; usage: any; calls: string[][]; reads: string[] }
 
-function world(on: any, opts: { env?: Record<string, string>; stored?: Record<string, unknown>; rateLimits?: any[]; branch?: string; procVersion?: string; localtime?: string; powershell?: string; startedAt?: number; settings?: string | (() => string); model?: () => string } = {}): World {
+function world(on: any, opts: { env?: Record<string, string>; stored?: Record<string, unknown>; rateLimits?: any[]; branch?: string; procVersion?: string; localtime?: string; powershell?: string; startedAt?: number; settings?: string | (() => string); model?: () => string; cwd?: string } = {}): World {
   // The plain line under the prompt unless a test asks for the coloured band.
   mock.store(on, { 'statusline-color': false, ...opts.stored })
   mock.env(on, opts.env ?? {})
@@ -22,6 +22,7 @@ function world(on: any, opts: { env?: Record<string, string>; stored?: Record<st
   on('session.start', (_$: any, e: any) => ({ cwd: e.cwd }))
   on('command.register', (_$: any, e: any) => ({ value: { command: e.name } }))
   on('session.usage', () => ({ value: usage }))
+  on('session.cwd', () => ({ value: opts.cwd ?? '' }))
   on('session.model', () => ({ value: opts.model?.() ?? 'opus' }))
   on('ui.status', (_$: any, e: any) => (lines.push(e.text), { value: undefined }))
   on('fs.read', (_$: any, e: any) => {
@@ -51,6 +52,12 @@ test('measure draws model, ctx, duration, limit in the local zone and branch', a
   const w = world(on, { env: { STATUSLINE_TZ: 'America/Sao_Paulo' }, branch: 'main' })
   await $.session.measure(MEASURE)
   expect(w.lines.at(-1)).toBe('Opus · ctx:14% 28k · 23m · limit:42% ↺ 15:30 ·  main')
+})
+
+test('the project folder closes the line', async ($, on) => {
+  const w = world(on, { env: { STATUSLINE_TZ: 'UTC' }, branch: 'main', cwd: '/home/u/projects/c-mods/' })
+  await $.session.measure(MEASURE)
+  expect(w.lines.at(-1)).toBe('Opus · ctx:14% 28k · 23m · limit:42% ↺ 18:30 · \ue0a0 main · project: c-mods')
 })
 
 test('session start draws too', async ($, on) => {
@@ -203,7 +210,7 @@ test('statusline-color on draws the line in colour above the prompt and clears t
   await $.session.measure(MEASURE)
   expect(w.lines.at(-1)).toBeUndefined()
   const ui = await band($)
-  expect((await ui.find({ type: 'Text', text: 'Opus' }))?.props.color).toBe('claude')
+  expect((await ui.find({ type: 'Text', text: 'Opus' }))?.props.color).toBe('error')
   expect((await ui.find({ type: 'Text', text: 'ctx:14% 28k' }))?.props.color).toBe('success')
   expect((await ui.find({ type: 'Text', text: 'limit:42% ↺ 18:30' }))?.props.color).toBe('success')
   expect((await ui.find({ type: 'Text', text: ' main' }))?.props.color).toBe('merged')
@@ -211,7 +218,7 @@ test('statusline-color on draws the line in colour above the prompt and clears t
   await ui.unmount()
 })
 
-for (const [percent, color] of [[49, 'success'], [50, 'warning'], [79, 'warning'], [80, 'error']] as const) {
+for (const [percent, color] of [[49, 'success'], [50, 'warning'], [69, 'warning'], [70, 'claude'], [84, 'claude'], [85, 'error']] as const) {
   test(`ctx at ${percent}% is drawn ${color}`, async ($, on) => {
     const w = world(on, { stored: { 'statusline-color': true }, rateLimits: [] })
     w.usage.context = { window: 200000, tokens: 28000, percent }
@@ -221,7 +228,9 @@ for (const [percent, color] of [[49, 'success'], [50, 'warning'], [79, 'warning'
     expect((await ui.find({ type: 'Text', text: 'ctx:' + percent + '% 28k' }))?.props.color).toBe(color)
     await ui.unmount()
   })
+}
 
+for (const [percent, color] of [[59, 'success'], [60, 'warning'], [79, 'warning'], [80, 'claude'], [89, 'claude'], [90, 'error']] as const) {
   test(`a rate limit at ${percent}% is drawn ${color}`, async ($, on) => {
     world(on, { stored: { 'statusline-color': true }, rateLimits: [{ kind: 'five_hour', percentUsed: percent }] })
     on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Text', children: [DEFAULT] }))

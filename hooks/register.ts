@@ -222,6 +222,7 @@ async function drawStatusLine($: EngineInterface, state: StatusLineState): Promi
       fiveHourResetsAt: fiveHour?.resetsAt,
       timezone: fiveHour?.resetsAt === undefined ? undefined : await resolveTimezone($, state),
       branch,
+      cwd: await readCwd($),
     })
     if ((await readToggles($))['statusline-color']) {
       $.ui.status(undefined)
@@ -352,7 +353,7 @@ export const register: Register = on => {
       key: 'status',
       children: segments.flatMap((segment, index) => [
         ...(index === 0 ? [] : [Text({ key: `sep-${index}`, dimColor: true, children: SEGMENT_SEPARATOR })]),
-        Text({ key: `seg-${index}`, color: TONE_COLORS[segment.tone], bold: segment.tone === 'model', children: segment.text }),
+        Text({ key: `seg-${index}`, color: TONE_COLORS[segment.tone], bold: segment.tone.startsWith('model'), children: segment.text }),
       ]),
     })
     return Box({ flexDirection: 'column', children: offBand === undefined ? [status] : [status, offBand] })
