@@ -25,6 +25,23 @@ const BASH_ROWS: Row[] = [
   ['git --no-pager reset --hard HEAD~1', 'git --no-pager reset --hard HEAD~1'],
   ['git --git-dir=/repo/.git push', 'git --git-dir=/repo/.git push'],
   ['git -c user.name=y push', 'git -c user.name=y push'],
+  // Denied however the flags are spelled or ordered.
+  ['git clean -xdf', 'git clean -xdf'],
+  ['git clean -d -f', 'git clean -d -f'],
+  ['git clean --force', 'git clean --force'],
+  ['git reset HEAD~1 --hard', 'git reset HEAD~1 --hard'],
+  ['git reset -q --hard', 'git reset -q --hard'],
+  ['git checkout HEAD -- .', 'git checkout HEAD -- .'],
+  ['git restore -s HEAD .', 'git restore -s HEAD .'],
+  ['git branch --delete --force x', 'git branch --delete --force x'],
+  ['git branch -d -f x', 'git branch -d -f x'],
+  // Denied behind any global option, and with the program or subcommand quoted.
+  ['git -P push', 'git -P push'],
+  ['git --bare push', 'git --bare push'],
+  ['git --work-tree /x push origin main', 'git --work-tree /x push origin main'],
+  ['git --git-dir /r push', 'git --git-dir /r push'],
+  ['"git" push', '"git" push'],
+  ['git p""ush', 'git p""ush'],
   // Allowed.
   ['git commit -m x', PASS],
   ['git -c user.email=x -c user.name=y commit -m x', PASS],
