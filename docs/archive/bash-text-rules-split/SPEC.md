@@ -1,6 +1,6 @@
 # bash-text-rules: split the parser from the path rules, and table-test the guards
 
-Status: ready-for-agent
+Status: done
 
 ## Problem Statement
 

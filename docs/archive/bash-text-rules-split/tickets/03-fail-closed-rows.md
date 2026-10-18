@@ -10,7 +10,7 @@
 
 **Blocked by:** 01
 
-Status: ready-for-human
+Status: done
 
 - [x] A row per unparsable shape, each asserting deny
 - [x] Rows cover every path where the parser returns the whole command

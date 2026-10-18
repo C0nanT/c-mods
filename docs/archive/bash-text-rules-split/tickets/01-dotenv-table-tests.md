@@ -10,7 +10,7 @@
 
 **Blocked by:** None (can start immediately)
 
-Status: ready-for-human
+Status: done
 
 - [x] A dotenv table exists and runs through the event seam
 - [x] Rows cover real access to the env file (denied) and mere mentions (passed)
