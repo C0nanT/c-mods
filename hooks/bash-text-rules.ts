@@ -7,7 +7,7 @@
  * kept, and its quoted text is appended as a command of its own. A command `bash-parser` cannot parse with
  * confidence is returned whole, so the guards stay closed.
  */
-import { basename, parse, Unparsable } from './bash-parser'
+import { basename, parse, substitutionsIn, Unparsable } from './bash-parser'
 import type { SimpleCommand, Word } from './bash-parser'
 
 /** Programs that run text they are given: their heredocs and quoted words are analysed as commands. */
@@ -191,8 +191,10 @@ export function simpleCommands(command: string): ShellCommand[] | undefined {
  * The pipelines of a command string, each as its simple commands in order; undefined when it cannot be parsed
  * with confidence. Text a shell runs is read as pipelines of its own, after the pipeline that holds it: command
  * substitutions, and the heredoc bodies fed to a shell or to a program not known to read them as text, such
- * as `at` or `sudo -s` (the bodies `executedText` keeps, bar a text body that holds a substitution). A body that cannot be parsed makes the whole command
- * unparsable. Quoted text passed to a shell or `watch` is not, since `executedText` appends it already.
+ * as `at` or `sudo -s` (the bodies `executedText` keeps, bar a text body that holds a substitution). In an
+ * unquoted body read as text, the substitutions are still read, since bash runs them while reading the body.
+ * The arguments of `watch` are read as the command it runs. A body or substitution that cannot be parsed makes
+ * the whole command unparsable. Quoted text passed to a shell is not, since `executedText` appends it already.
  */
 export function pipelineCommands(command: string): ShellCommand[][] | undefined {
   try {
@@ -210,15 +212,39 @@ function pipelinesOf(command: string): ShellCommand[][] {
     const nested: ShellCommand[][] = []
     pipeline.forEach((simple, index) => {
       for (const word of simple.words) {
-        if (word.runsCode) nested.push(...pipelinesOf(word.value.replace(/\$\(|\)|`/g, '\n')))
+        if (word.runsCode) nested.push(...substitutionsIn(word.value).flatMap(pipelinesOf))
       }
-      if (runsHeredocAt(pipeline, index, lastShell)) {
-        for (const heredoc of simple.heredocs) nested.push(...pipelinesOf(command.slice(heredoc.start, heredoc.bodyEnd)))
+      const runsBodies = runsHeredocAt(pipeline, index, lastShell)
+      for (const heredoc of simple.heredocs) {
+        const body = command.slice(heredoc.start, heredoc.bodyEnd)
+        if (runsBodies) nested.push(...pipelinesOf(body))
+        else if (heredoc.runsCode) nested.push(...substitutionsIn(body).flatMap(pipelinesOf))
       }
+      const watched = watchedCommand(simple)
+      if (watched !== undefined) nested.push(...pipelinesOf(watched))
     })
     pipelines.push(pipeline.map(shellCommand), ...nested)
   }
   return pipelines
+}
+
+/** `watch` options that take the next word as their value. */
+const WATCH_VALUE_OPTIONS = ['-n', '--interval', '-q', '--equexit']
+
+/**
+ * The shell text an `ARGUMENT_SHELLS` program runs: its arguments past its own options, joined with spaces as
+ * `watch` joins them before it hands them to `sh -c`; undefined for any other program.
+ */
+function watchedCommand(command: SimpleCommand): string | undefined {
+  const program = programOf(command)
+  if (program === undefined || !ARGUMENT_SHELLS.includes(program.name)) return undefined
+  const rest = program.args.map(word => word.value)
+  while (rest.length > 0 && rest[0].startsWith('-')) {
+    const option = rest.shift()
+    if (option === '--') break
+    if (WATCH_VALUE_OPTIONS.includes(option ?? '')) rest.shift()
+  }
+  return rest.join(' ')
 }
 
 function shellCommand(command: SimpleCommand): ShellCommand {

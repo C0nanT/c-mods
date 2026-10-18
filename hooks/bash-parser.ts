@@ -234,5 +234,34 @@ function skipBalanced(command: string, start: number, open: string, close: strin
   throw new Unparsable()
 }
 
+/**
+ * The commands held by the `$(...)` and backtick substitutions of an unquoted heredoc body, which bash runs
+ * while it reads the body, whatever program the body is fed to. Quotes are plain text in the body, so only
+ * a backslash escapes; inside a substitution the shell's quoting holds again. A `${...}` is searched too.
+ * Also reads the value of a word that runs code, whose quotes are already removed. Throws `Unparsable` when
+ * a substitution is not closed.
+ */
+export function substitutionsIn(body: string): string[] {
+  const found: string[] = []
+  for (let i = 0; i < body.length; i++) {
+    const char = body.charAt(i)
+    if (char === '\\') i++
+    else if (char === '`') {
+      const end = skipEscaped(body, i + 1, '`')
+      found.push(body.slice(i + 1, end - 1))
+      i = end - 1
+    } else if (char === '$' && body[i + 1] === '(') {
+      const end = skipBalanced(body, i + 2, '(', ')')
+      found.push(body.slice(i + 2, end - 1))
+      i = end - 1
+    } else if (char === '$' && body[i + 1] === '{') {
+      const end = skipBalanced(body, i + 2, '{', '}')
+      found.push(...substitutionsIn(body.slice(i + 2, end - 1)))
+      i = end - 1
+    }
+  }
+  return found
+}
+
 /** The part after the last `/`, ignoring trailing slashes. */
 export const basename = (value: string) => value.split('/').filter(Boolean).pop() ?? ''

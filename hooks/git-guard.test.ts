@@ -62,6 +62,10 @@ const BASH_ROWS: Row[] = [
   ['make -f - <<EOF\nall:\n\tgit push\nEOF', 'make -f - <<EOF\nall:\n\tgit push\nEOF'],
   ["watch 'git push'", "watch 'git push'"],
   ["watch -n 5 'git push'", "watch -n 5 'git push'"],
+  // Denied in a substitution inside an unquoted heredoc body: bash runs it while reading the body, whoever reads it.
+  ['cat > f <<EOF\n$(git push)\nEOF', 'cat > f <<EOF\n$(git push)\nEOF'],
+  ['cat > f <<EOF\n`git push`\nEOF', 'cat > f <<EOF\n`git push`\nEOF'],
+  ['echo "$(cat <<EOF\n$(git push)\nEOF\n)"', 'echo "$(cat <<EOF\n$(git push)\nEOF\n)"'],
   // Allowed.
   ['git commit -m x', PASS],
   ['git -c user.email=x -c user.name=y commit -m x', PASS],
@@ -92,6 +96,9 @@ const BASH_ROWS: Row[] = [
   ['python3 - <<EOF\nprint("git push")\nEOF', PASS],
   ['git commit -F - <<EOF\ngit push\nEOF', PASS],
   ["watch 'git status'", PASS],
+  ["cat > f <<'EOF'\n$(git push)\nEOF", PASS],
+  ['cat > f <<"EOF"\n$(git push)\nEOF', PASS],
+  ["cat > f <<EOF\ndon't $(git status)\nEOF", PASS],
 ]
 
 /** `git`, its global options, then the subcommand: the start of every pattern git-guard reports. */

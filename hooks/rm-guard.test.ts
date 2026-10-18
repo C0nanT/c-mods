@@ -58,6 +58,12 @@ const BASH_ROWS: Row[] = [
   // Denied in a heredoc body fed to a program that may run it, and in the text `watch` runs.
   ['at now <<EOF\nrm -rf /\nEOF', 'at now <<EOF\nrm -rf /\nEOF'],
   ["watch 'rm -rf ~'", "watch 'rm -rf ~'"],
+  ['watch rm -rf ~', 'watch rm -rf ~'],
+  ['watch -n 5 rm -rf ~', 'watch -n 5 rm -rf ~'],
+  // Denied in a substitution inside an unquoted heredoc body: bash runs it while reading the body, whoever reads it.
+  ['cat > f <<EOF\n$(rm -rf ~)\nEOF', 'cat > f <<EOF\n$(rm -rf ~)\nEOF'],
+  ['cat > f <<EOF\n`rm -rf ~`\nEOF', 'cat > f <<EOF\n`rm -rf ~`\nEOF'],
+  ['echo "$(cat <<EOF\n$(rm -rf ~)\nEOF\n)"', 'echo "$(cat <<EOF\n$(rm -rf ~)\nEOF\n)"'],
   // Allowed.
   ['rm -rf node_modules', PASS],
   ['rm -rf ./dist', PASS],
@@ -79,6 +85,9 @@ const BASH_ROWS: Row[] = [
   ['cat <<EOF\nrm -rf ~\nEOF', PASS],
   ['tee notes.md <<EOF\nrm -rf ~\nEOF', PASS],
   ["watch 'rm -rf dist'", PASS],
+  ['watch rm -rf dist', PASS],
+  ["cat > f <<'EOF'\n$(rm -rf ~)\nEOF", PASS],
+  ['cat > f <<"EOF"\n$(rm -rf ~)\nEOF', PASS],
   ['sudo -u root rm -rf /', PASS], // wrapper options are out of scope: no worse than today.
 ]
 
