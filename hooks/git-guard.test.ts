@@ -55,6 +55,13 @@ const BASH_ROWS: Row[] = [
   ['f() { git push; }; f', 'f() { git push; }; f'],
   ['case x in x) git push;; esac', 'case x in x) git push;; esac'],
   ['cat <(git push)', 'cat <(git push)'],
+  // Denied in a heredoc body fed to a program that may run it, and in the text `watch` runs.
+  ['at now <<EOF\ngit push\nEOF', 'at now <<EOF\ngit push\nEOF'],
+  ['sudo -s <<EOF\ngit push\nEOF', 'sudo -s <<EOF\ngit push\nEOF'],
+  ["cat <<'EOF' | sudo -s\ngit push\nEOF", "cat <<'EOF' | sudo -s\ngit push\nEOF"],
+  ['make -f - <<EOF\nall:\n\tgit push\nEOF', 'make -f - <<EOF\nall:\n\tgit push\nEOF'],
+  ["watch 'git push'", "watch 'git push'"],
+  ["watch -n 5 'git push'", "watch -n 5 'git push'"],
   // Allowed.
   ['git commit -m x', PASS],
   ['git -c user.email=x -c user.name=y commit -m x', PASS],
@@ -78,6 +85,13 @@ const BASH_ROWS: Row[] = [
   ['git -C /tmp status', PASS],
   ['git --no-pager log', PASS],
   ['git diff', PASS],
+  // A heredoc body read as text, not run.
+  ['cat <<EOF\ngit push\nEOF', PASS],
+  ['tee notes.md <<EOF\ngit push\nEOF', PASS],
+  ["cat <<'EOF' | grep push\ngit push\nEOF", PASS],
+  ['python3 - <<EOF\nprint("git push")\nEOF', PASS],
+  ['git commit -F - <<EOF\ngit push\nEOF', PASS],
+  ["watch 'git status'", PASS],
 ]
 
 /** `git`, its global options, then the subcommand: the start of every pattern git-guard reports. */

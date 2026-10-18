@@ -55,6 +55,9 @@ const BASH_ROWS: Row[] = [
   ["rm -rf '/'", "rm -rf '/'"],
   ['time chmod -R 777 .', 'time chmod -R 777 .'],
   ['/bin/chmod -R 777 .', '/bin/chmod -R 777 .'],
+  // Denied in a heredoc body fed to a program that may run it, and in the text `watch` runs.
+  ['at now <<EOF\nrm -rf /\nEOF', 'at now <<EOF\nrm -rf /\nEOF'],
+  ["watch 'rm -rf ~'", "watch 'rm -rf ~'"],
   // Allowed.
   ['rm -rf node_modules', PASS],
   ['rm -rf ./dist', PASS],
@@ -73,6 +76,9 @@ const BASH_ROWS: Row[] = [
   ['echo $(rm -rf dist)', PASS],
   ['/bin/rm -rf node_modules', PASS],
   ['echo "rm -rf ~"', PASS],
+  ['cat <<EOF\nrm -rf ~\nEOF', PASS],
+  ['tee notes.md <<EOF\nrm -rf ~\nEOF', PASS],
+  ["watch 'rm -rf dist'", PASS],
   ['sudo -u root rm -rf /', PASS], // wrapper options are out of scope: no worse than today.
 ]
 

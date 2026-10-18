@@ -28,6 +28,7 @@ const UNPARSABLE_SHAPES: [shape: string, wrap: (danger: string) => string][] = [
   ['heredoc whose delimiter line is never reached', d => `cat <<EOF\n${d}\nEOFX`],
   ['unquoted heredoc line ending in a backslash', d => `${d}; cat <<EOF\nbody\\\nEOF\nmore`],
   ['dangerous command inside an unterminated shell heredoc', d => `bash <<EOF\n${d}`],
+  ['unparsable body of a heredoc fed to a program that may run it', d => `at now <<EOF\n${d}\necho 'oops\nEOF`],
 ]
 
 for (const [guard, danger, message] of GUARDS) {
