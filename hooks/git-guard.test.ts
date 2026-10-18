@@ -48,6 +48,9 @@ const BASH_ROWS: Row[] = [
   ['xargs git push', 'xargs git push'],
   ['timeout 5 git push', 'timeout 5 git push'],
   ['find . -exec git push \\;', 'find . -exec git push \\;'],
+  ['sudo -u git -H git push', 'sudo -u git -H git push'],
+  ['sudo -u git git push', 'sudo -u git git push'],
+  ['find . -name git -exec git push \\;', 'find . -name git -exec git push \\;'],
   // Denied inside other shell shapes.
   ['f() { git push; }; f', 'f() { git push; }; f'],
   ['case x in x) git push;; esac', 'case x in x) git push;; esac'],

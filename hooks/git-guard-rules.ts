@@ -98,21 +98,20 @@ function matchSubcommand(name: string, args: readonly string[]): string | undefi
 }
 
 /**
- * The words after `git` in a parsed command, or undefined when it runs no git. `git` is the first word named
- * `git`, the program or any word after it, so launchers (`sudo -u root git`, `env -i git`, `xargs git`,
- * `timeout 5 git`, `find -exec git`) are read as git too. A quoted string is one word, so `grep 'git push'` is not.
+ * The words after each word named `git` in a parsed command, program or argument, so launchers
+ * (`sudo -u root git`, `env -i git`, `xargs git`, `timeout 5 git`, `find -exec git`) are read as git too,
+ * and a `git` user or file name before the real program (`sudo -u git git push`) does not hide it.
+ * A quoted string is one word, so `grep 'git push'` holds no git.
  */
-function gitArgs(shell: ShellCommand): string[] | undefined {
+function gitArgLists(shell: ShellCommand): string[][] {
   const words = [...shell.prefix, ...(shell.program === undefined ? [] : [shell.program]), ...shell.args]
-  const at = words.findIndex(word => basename(word) === 'git')
-  return at === -1 ? undefined : words.slice(at + 1)
+  return words.flatMap((word, at) => (basename(word) === 'git' ? [words.slice(at + 1)] : []))
 }
 
 /** The pattern the parsed git commands match, or undefined when none does. */
 function matchParsed(commands: readonly ShellCommand[]): string | undefined {
-  for (const shell of commands) {
-    const args = gitArgs(shell)
-    const subcommand = args === undefined ? undefined : subcommandOf(args)
+  for (const args of commands.flatMap(gitArgLists)) {
+    const subcommand = subcommandOf(args)
     const pattern = subcommand === undefined ? undefined : matchSubcommand(subcommand.name, subcommand.args)
     if (pattern !== undefined) return pattern
   }
