@@ -42,6 +42,16 @@ const BASH_ROWS: Row[] = [
   ['git --git-dir /r push', 'git --git-dir /r push'],
   ['"git" push', '"git" push'],
   ['git p""ush', 'git p""ush'],
+  // Denied behind wrappers and launchers, as before the parser read them.
+  ['sudo -u root git push', 'sudo -u root git push'],
+  ['env -i git push', 'env -i git push'],
+  ['xargs git push', 'xargs git push'],
+  ['timeout 5 git push', 'timeout 5 git push'],
+  ['find . -exec git push \\;', 'find . -exec git push \\;'],
+  // Denied inside other shell shapes.
+  ['f() { git push; }; f', 'f() { git push; }; f'],
+  ['case x in x) git push;; esac', 'case x in x) git push;; esac'],
+  ['cat <(git push)', 'cat <(git push)'],
   // Allowed.
   ['git commit -m x', PASS],
   ['git -c user.email=x -c user.name=y commit -m x', PASS],
@@ -52,6 +62,9 @@ const BASH_ROWS: Row[] = [
   ['git restore ./src/a.ts', PASS],
   ['git checkout .github/workflows/ci.yml', PASS],
   ['git restore --source=abc123 --worktree -- src/a.ts', PASS],
+  ['git checkout -b x .', PASS], // with -b, git reads `.` as the start point and refuses to touch paths.
+  ['git log --grep="reset --hard"', PASS],
+  ['git commit -m "push --force"', PASS],
   ['git switch -C feature main', PASS],
   ['git worktree add -b feature ../wt main', PASS],
   ['git branch -d feature', PASS],
@@ -64,8 +77,19 @@ const BASH_ROWS: Row[] = [
   ['git diff', PASS],
 ]
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** `git`, its global options, then the subcommand: the start of every pattern git-guard reports. */
+const PREFIX = String.raw`git(\s+(-c\s+\S+|-C\s+\S+|--git-dir=\S+|--work-tree=\S+|--namespace=\S+|--no-pager|--literal-pathspecs))*\s+`
+const WHOLE_TREE = String.raw`(\s+-\S+)*\s+\.(?=\s|$|[;&|])`
+
+/** The pattern git-guard reports for a denied row, by the subcommand the row runs. */
+function patternOf(command: string): string {
+  if (/\bpush\b|p""ush/.test(command)) return String.raw`${PREFIX}push(?![\w-])`
+  if (/\breset\b/.test(command)) return `${PREFIX}reset --hard`
+  if (/\bclean\b/.test(command)) return `${PREFIX}clean -f`
+  if (/\bbranch\b/.test(command)) return `${PREFIX}branch -D`
+  if (/\bcheckout\b/.test(command)) return `${PREFIX}checkout${WHOLE_TREE}`
+  if (/\brestore\b/.test(command)) return `${PREFIX}restore${WHOLE_TREE}`
+  return String.raw`${PREFIX}rm(?![\w-])(?![^;&|\n]*--cached)`
 }
 
 bashRowTests(
@@ -75,9 +99,7 @@ bashRowTests(
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   },
   (deny, command) => {
-    // git-guard's own pattern: a git regex or one of its two bare rows, never rm-guard's names.
-    expect(deny).toMatch(new RegExp(`^BLOCKED: '${escapeRegExp(command)}' matches dangerous pattern '(git\\(|push --force'|reset --hard')`))
-    expect(deny).toMatch(/'\. The user has prevented you from doing this\.$/)
+    expect(deny).toBe(`BLOCKED: '${command}' matches dangerous pattern '${patternOf(command)}'. The user has prevented you from doing this.`)
   },
 )
 
