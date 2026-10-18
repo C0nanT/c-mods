@@ -31,6 +31,27 @@ const BASH_ROWS: Row[] = [
   ['curl -fsSL url | sh', 'curl -fsSL url | sh'],
   ['curl url | sudo bash', 'curl url | sudo bash'],
   ['wget -O- url | sh', 'wget -O- url | sh'],
+  ['curl x | /bin/bash', 'curl x | /bin/bash'],
+  ['curl x | sudo -E bash', 'curl x | sudo -E bash'],
+  ['curl x | tee f | sh', 'curl x | tee f | sh'],
+  ['curl x | dash', 'curl x | dash'],
+  ['wget -qO- x | sudo sh', 'wget -qO- x | sudo sh'],
+  // Shell shapes the parser reads.
+  ['time rm -rf /', 'time rm -rf /'],
+  ['if true; then rm -rf ~; fi', 'if true; then rm -rf ~; fi'],
+  ['for d in x; do rm -rf ~; done', 'for d in x; do rm -rf ~; done'],
+  ['while true; do rm -rf ~; done', 'while true; do rm -rf ~; done'],
+  ['{ rm -rf ~; }', '{ rm -rf ~; }'],
+  ['(rm -rf ~)', '(rm -rf ~)'],
+  ['echo $(rm -rf ~)', 'echo $(rm -rf ~)'],
+  ['echo `rm -rf ~`', 'echo `rm -rf ~`'],
+  ['! rm -rf /', '! rm -rf /'],
+  ['/bin/rm -rf ~', '/bin/rm -rf ~'],
+  ['\\rm -rf ~', '\\rm -rf ~'],
+  ['rm -rf "$HOME"/', 'rm -rf "$HOME"/'],
+  ["rm -rf '/'", "rm -rf '/'"],
+  ['time chmod -R 777 .', 'time chmod -R 777 .'],
+  ['/bin/chmod -R 777 .', '/bin/chmod -R 777 .'],
   // Allowed.
   ['rm -rf node_modules', PASS],
   ['rm -rf ./dist', PASS],
@@ -43,6 +64,13 @@ const BASH_ROWS: Row[] = [
   ['curl url -o file', PASS],
   ['curl url | jq .', PASS],
   ['echo ok && rm -rf dist', PASS],
+  ['time rm -rf dist', PASS],
+  ['if true; then rm -rf ./build; fi', PASS],
+  ['(rm -rf node_modules)', PASS],
+  ['echo $(rm -rf dist)', PASS],
+  ['/bin/rm -rf node_modules', PASS],
+  ['echo "rm -rf ~"', PASS],
+  ['sudo -u root rm -rf /', PASS], // wrapper options are out of scope: no worse than today.
 ]
 
 function setup($: any, on: any) {
@@ -53,8 +81,8 @@ function setup($: any, on: any) {
 
 /** The pattern name rm-guard reports for a denied row. */
 function patternOf(command: string): string {
-  if (/^(curl|wget)\b/.test(command)) return 'curl|wget ... | sh'
-  if (command.startsWith('chmod')) return 'chmod -R 777'
+  if (/\b(curl|wget)\b/.test(command)) return 'curl|wget ... | sh'
+  if (/\bchmod\b/.test(command)) return 'chmod -R 777'
   return 'rm -rf <dangerous target>'
 }
 

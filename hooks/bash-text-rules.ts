@@ -11,7 +11,7 @@ import { basename, parse, Unparsable } from './bash-parser'
 import type { SimpleCommand, Word } from './bash-parser'
 
 /** Programs that run text they are given: their heredocs and quoted words are analysed as commands. */
-const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', 'ssh', 'su']
+export const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', 'ssh', 'su']
 /** Programs whose heredoc body is inert, besides the interpreters and `git commit`. */
 const HEREDOC_READERS = ['cat', 'tee']
 /** Programs that may follow an inert span in a pipeline: they print or count text, never run it. */
@@ -165,6 +165,16 @@ export type ShellCommand = {
 export function simpleCommands(command: string): ShellCommand[] | undefined {
   try {
     return commandsOf(command)
+  } catch (e) {
+    if (e instanceof Unparsable) return undefined
+    throw e
+  }
+}
+
+/** The pipelines of a command string, each as its simple commands in order; undefined when it cannot be parsed with confidence. */
+export function pipelineCommands(command: string): ShellCommand[][] | undefined {
+  try {
+    return parse(command).map(pipeline => pipeline.map(shellCommand))
   } catch (e) {
     if (e instanceof Unparsable) return undefined
     throw e
