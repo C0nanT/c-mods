@@ -1,3 +1,6 @@
+import { basename } from './bash-parser'
+import { simpleCommands } from './bash-text-rules'
+
 const PIPE_TO_SHELL = /\b(curl|wget)\b[^|;&\n]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/
 
 const PATTERN_RM = 'rm -rf <dangerous target>'
@@ -17,7 +20,7 @@ function fold(path: string): string {
   return `/${parts.join('/')}`
 }
 
-/** The words of one simple command, quotes removed, leading `VAR=x`, `sudo` and the like skipped. */
+/** Fallback reading for text the parser cannot read: the words of one segment, leading `VAR=x`, `sudo` and the like skipped. */
 function words(segment: string): string[] {
   const all = segment.trim().split(/\s+/).filter(Boolean).map(word => word.replace(/^["']|["']$/g, ''))
   let start = 0
@@ -41,8 +44,8 @@ function isDangerousTarget(target: string, cwd: string): boolean {
   return false
 }
 
-function matchSegment(segment: string, cwd: string): string | undefined {
-  const [program, ...args] = words(segment)
+/** The pattern one command matches, given its program's base name and its arguments. */
+function matchProgram(program: string | undefined, args: readonly string[], cwd: string): string | undefined {
   if (program === 'rm') {
     const flags = flagLetters(args)
     const isRecursive = args.includes('--recursive') || /[rR]/.test(flags)
@@ -58,9 +61,26 @@ function matchSegment(segment: string, cwd: string): string | undefined {
   return undefined
 }
 
-/** The pattern a destructive part of the command matches, or undefined when it is safe. */
+function matchSegment(segment: string, cwd: string): string | undefined {
+  const [program, ...args] = words(segment)
+  return matchProgram(program, args, cwd)
+}
+
+/**
+ * The pattern a destructive part of the command matches, or undefined when it is safe. Each simple command
+ * the shell would run is read through the shared parser, the program compared by base name; a command the
+ * parser cannot read is split on its operators instead, so it still fails closed.
+ */
 export function matchRmDangerous(command: string, cwd: string): string | undefined {
   if (PIPE_TO_SHELL.test(command)) return PATTERN_PIPE
+  const commands = simpleCommands(command)
+  if (commands !== undefined) {
+    for (const { program, args } of commands) {
+      const pattern = matchProgram(program === undefined ? undefined : basename(program), args, cwd)
+      if (pattern !== undefined) return pattern
+    }
+    return undefined
+  }
   for (const segment of command.split(/&&|\|\||[;|&\n]/)) {
     const pattern = matchSegment(segment, cwd)
     if (pattern !== undefined) return pattern
