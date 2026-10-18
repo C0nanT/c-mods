@@ -4,7 +4,7 @@ const DIR = '/usr/share/sounds/freedesktop/stereo'
 const DONE = { answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'complete' }
 
 function world(on: any, opts: { wsl?: boolean; procVersion?: string; failing?: string[]; missing?: string[]; stored?: Record<string, unknown> } = {}) {
-  mock.store(on, opts.stored ?? {})
+  mock.store(on, { 'session-log': false, ...opts.stored })
   mock.env(on, opts.wsl ? { WSL_DISTRO_NAME: 'Ubuntu' } : {})
   const clock = mock.clock(on)
   const calls: string[][] = []

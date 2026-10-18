@@ -1,7 +1,7 @@
 # `c-mods`
 
 A Claude Code plugin (a mod: TypeScript hooks that run inside Claude Code) with
-eight functions:
+nine functions:
 
 | Function | What it does |
 |---|---|
@@ -11,6 +11,7 @@ eight functions:
 | `secret-guard` | Blocks reading or editing credential files through Read, Edit, Write, MultiEdit and Bash: `~/.ssh/*` (except `known_hosts`, `config` and `*.pub`), `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519`, `~/.aws/credentials`, `~/.config/gcloud/`, `~/.azure/`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `~/.docker/config.json` and `~/.config/gh/hosts.yml`. When HOME is missing or unreadable, the home-anchored rules cannot be checked, so paths starting with `~` or `$HOME` (and absolute paths under those directories) are blocked. In Bash the extension rules block only a file that exists, so code such as `row.key` passes; if the check fails, the command is blocked. |
 | `rm-guard` | Blocks destructive shell commands: `rm -rf` (any flag spelling) on `/`, `/*`, `~`, `$HOME`, `..`, `../…`, a lone `*` or an absolute path outside the current directory, `chmod -R 777`, and `curl`/`wget` piped into `sh`, `bash` or `zsh`. Each part of a compound line is checked; `rm -rf node_modules` and other relative paths inside the project pass. |
 | `sound` | Plays a sound when Claude finishes a task: `paplay` on Ubuntu, PowerShell beeps on WSL. No visual notification. |
+| `session-log` | Appends one JSON line per finished turn (time, prompt, the Bash commands Claude ran, duration, whether it was aborted) to `~/.claude/log/<project>-<hash>/YYYY-MM-DD.jsonl`. Each project (by the folder the session is open in) has its own folder, so logs never mix; the hash keeps two folders with the same name apart. The day follows your local zone (see the status line). Sub-agent turns are not logged and a failed write never disturbs the turn. Prompts and commands are stored as plain text, secrets included: switch it off with `/c-mods session-log off` when that matters. |
 | `statusline` | Draws the plugin's status line under the prompt: model as name and version with the effort on its right when known (`Sonnet 5.5 - medium`; read from `~/.claude/settings.json` until the first turn reports it: `modelSettings[<model>].effortLevel`, else `effortLevel`; the turn's own value wins afterwards), `ctx:<pct>% <tokens>k`, session duration (`23m`, `1h05m`), `limit:<pct>% ↺ HH:MM` for the 5-hour rate-limit window and the git branch after the Nerd Font branch icon (` main`; without a Nerd Font it shows as a box). and `project: <folder>`, the name of the folder the session is open in, last. A field with no data is left out. Updates when the session opens and after each measurement; the duration restarts on `/clear`. Drawn in colour above the prompt while `statusline-color` is on, as plain text under it otherwise. |
 | `statusline-color` | Draws the status line in colour in a band above the prompt: the model in bold (green for Haiku, orange for Sonnet, red for Opus, red with a ⚠ after the name for Fable), `ctx` green under 50%, yellow to 69%, orange to 84% and red from 85%; the rate limit green under 60%, yellow to 79%, orange to 89% and red from 90%. Off, the line goes back under the prompt as plain text (that line cannot take colour). Does nothing while `statusline` is off. |
 
@@ -53,7 +54,7 @@ button). Pressing a button switches that function the same way the text command 
 redraw at once. Esc closes the pane and returns the prompt. The reply still carries the `name: on|off` list, for the
 transcript and for places where the pane does not open.
 
-Valid names: `caveman`, `git-guard`, `dotenv-guard`, `secret-guard`, `rm-guard`, `sound`, `statusline`, `statusline-color`. Anything else
+Valid names: `caveman`, `git-guard`, `dotenv-guard`, `secret-guard`, `rm-guard`, `sound`, `session-log`, `statusline`, `statusline-color`. Anything else
 prints the usage.
 
 ### The status line

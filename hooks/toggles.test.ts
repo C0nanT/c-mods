@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-const NAMES = ['caveman', 'git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard', 'sound', 'statusline', 'statusline-color']
+const NAMES = ['caveman', 'git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard', 'sound', 'session-log', 'statusline', 'statusline-color']
 
 async function hooks($: any, args = '') {
   return $.command.run({ command: 'c-mods', args })

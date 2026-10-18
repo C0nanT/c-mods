@@ -6,6 +6,7 @@ export type StoredToggles = {
   'secret-guard'?: boolean
   'rm-guard'?: boolean
   sound?: boolean
+  'session-log'?: boolean
   statusline?: boolean
   'statusline-color'?: boolean
 }
