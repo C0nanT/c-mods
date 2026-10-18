@@ -64,6 +64,12 @@ const BASH_ROWS: Row[] = [
   ['cat > f <<EOF\n$(rm -rf ~)\nEOF', 'cat > f <<EOF\n$(rm -rf ~)\nEOF'],
   ['cat > f <<EOF\n`rm -rf ~`\nEOF', 'cat > f <<EOF\n`rm -rf ~`\nEOF'],
   ['echo "$(cat <<EOF\n$(rm -rf ~)\nEOF\n)"', 'echo "$(cat <<EOF\n$(rm -rf ~)\nEOF\n)"'],
+  // Denied in a substitution next to quoted or escaped text that looks like an escape or an opening.
+  ['echo \\\\$(rm -rf ~)', 'echo \\\\$(rm -rf ~)'],
+  ["echo '\\'$(rm -rf ~)", "echo '\\'$(rm -rf ~)"],
+  ["echo '$('$(rm -rf ~)", "echo '$('$(rm -rf ~)"],
+  ["echo '`'$(rm -rf ~)", "echo '`'$(rm -rf ~)"],
+  ['echo `echo \\`rm -rf ~\\``', 'echo `echo \\`rm -rf ~\\``'],
   // Allowed.
   ['rm -rf node_modules', PASS],
   ['rm -rf ./dist', PASS],

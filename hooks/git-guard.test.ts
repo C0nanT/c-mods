@@ -66,6 +66,11 @@ const BASH_ROWS: Row[] = [
   ['cat > f <<EOF\n$(git push)\nEOF', 'cat > f <<EOF\n$(git push)\nEOF'],
   ['cat > f <<EOF\n`git push`\nEOF', 'cat > f <<EOF\n`git push`\nEOF'],
   ['echo "$(cat <<EOF\n$(git push)\nEOF\n)"', 'echo "$(cat <<EOF\n$(git push)\nEOF\n)"'],
+  // Denied in a substitution next to quoted or escaped text that looks like an escape or an opening.
+  ['echo \\\\$(git push)', 'echo \\\\$(git push)'],
+  ["echo '\\'$(git push)", "echo '\\'$(git push)"],
+  ["echo '$('$(git push)", "echo '$('$(git push)"],
+  ['echo `echo \\`git push\\``', 'echo `echo \\`git push\\``'],
   // Allowed.
   ['git commit -m x', PASS],
   ['git -c user.email=x -c user.name=y commit -m x', PASS],

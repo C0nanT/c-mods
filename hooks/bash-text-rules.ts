@@ -212,7 +212,7 @@ function pipelinesOf(command: string): ShellCommand[][] {
     const nested: ShellCommand[][] = []
     pipeline.forEach((simple, index) => {
       for (const word of simple.words) {
-        if (word.runsCode) nested.push(...substitutionsIn(word.value).flatMap(pipelinesOf))
+        nested.push(...word.substitutions.flatMap(pipelinesOf))
       }
       const runsBodies = runsHeredocAt(pipeline, index, lastShell)
       for (const heredoc of simple.heredocs) {

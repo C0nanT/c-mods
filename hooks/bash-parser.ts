@@ -14,6 +14,8 @@ export type Word = {
   isQuoted: boolean
   /** True when the word holds a command substitution, which runs whatever command it holds. */
   runsCode: boolean
+  /** The command text of each substitution the word holds, as the shell will run it. */
+  substitutions: string[]
   /** True when the word holds an unquoted `*`, `?` or `[`, which the shell may expand to file names. */
   hasGlob: boolean
   isRedirectTarget: boolean
@@ -133,6 +135,7 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
   let value = ''
   let isQuoted = false
   let runsCode = false
+  const substitutions: string[] = []
   let hasGlob = false
   let i = start
   while (i < command.length) {
@@ -163,6 +166,7 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
           const expansion = readExpansion(command, i)
           value += expansion.text
           runsCode ||= expansion.runsCode
+          substitutions.push(...expansion.substitutions)
           i = expansion.end
         } else {
           value += inner
@@ -178,6 +182,7 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
       const expansion = readExpansion(command, i)
       value += expansion.text
       runsCode ||= expansion.runsCode
+      substitutions.push(...expansion.substitutions)
       i = expansion.end
     } else {
       value += char
@@ -185,28 +190,33 @@ function readWord(command: string, start: number): Omit<Word, 'isRedirectTarget'
       i++
     }
   }
-  return { start, end: i, value, isQuoted, runsCode, hasGlob }
+  return { start, end: i, value, isQuoted, runsCode, substitutions, hasGlob }
 }
 
-/** A `$`, `${...}`, `$(...)` or backtick expansion starting at `start`. */
-function readExpansion(command: string, start: number): { text: string; end: number; runsCode: boolean } {
+type Expansion = { text: string; end: number; runsCode: boolean; substitutions: string[] }
+
+/** A `$`, `${...}`, `$(...)` or backtick expansion starting at `start`, with the command text of the substitutions it holds. */
+function readExpansion(command: string, start: number): Expansion {
   if (command[start] === '`') {
     const end = skipEscaped(command, start + 1, '`')
-    return { text: command.slice(start, end), end, runsCode: true }
+    // Inside backticks, a backslash before `, $ or \ only escapes it.
+    const inner = command.slice(start + 1, end - 1).replace(/\\([`$\\])/g, '$1')
+    return { text: command.slice(start, end), end, runsCode: true, substitutions: [inner] }
   }
   if (command[start + 1] === '(') {
     QUOTED_CAT_HEREDOC.lastIndex = start
     const quotedCat = QUOTED_CAT_HEREDOC.exec(command)
-    if (quotedCat !== null) return { text: quotedCat[3] ?? '', end: QUOTED_CAT_HEREDOC.lastIndex, runsCode: false }
+    if (quotedCat !== null) return { text: quotedCat[3] ?? '', end: QUOTED_CAT_HEREDOC.lastIndex, runsCode: false, substitutions: [] }
     const end = skipBalanced(command, start + 2, '(', ')')
-    return { text: command.slice(start, end), end, runsCode: true }
+    return { text: command.slice(start, end), end, runsCode: true, substitutions: [command.slice(start + 2, end - 1)] }
   }
   if (command[start + 1] === '{') {
     const end = skipBalanced(command, start + 2, '{', '}')
     const text = command.slice(start, end)
-    return { text, end, runsCode: /\$\(|`/.test(text) }
+    const substitutions = substitutionsIn(command.slice(start + 2, end - 1))
+    return { text, end, runsCode: substitutions.length > 0, substitutions }
   }
-  return { text: '$', end: start + 1, runsCode: false }
+  return { text: '$', end: start + 1, runsCode: false, substitutions: [] }
 }
 
 /** The index just past the unescaped `close` found from `start`. */
@@ -237,9 +247,8 @@ function skipBalanced(command: string, start: number, open: string, close: strin
 /**
  * The commands held by the `$(...)` and backtick substitutions of an unquoted heredoc body, which bash runs
  * while it reads the body, whatever program the body is fed to. Quotes are plain text in the body, so only
- * a backslash escapes; inside a substitution the shell's quoting holds again. A `${...}` is searched too.
- * Also reads the value of a word that runs code, whose quotes are already removed. Throws `Unparsable` when
- * a substitution is not closed.
+ * a backslash escapes; inside a substitution the shell's quoting holds again. A `${...}` is searched too,
+ * as is the inside of a `${...}` in a word. Throws `Unparsable` when a substitution is not closed.
  */
 export function substitutionsIn(body: string): string[] {
   const found: string[] = []
