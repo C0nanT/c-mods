@@ -1,4 +1,4 @@
-export const TOGGLE_NAMES = ['caveman', 'git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard', 'sound', 'statusline', 'statusline-color'] as const
+export const TOGGLE_NAMES = ['caveman', 'git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard', 'sound', 'session-log', 'statusline', 'statusline-color'] as const
 export type ToggleName = (typeof TOGGLE_NAMES)[number]
 export type Toggles = Record<ToggleName, boolean>
 
@@ -25,7 +25,7 @@ export function listText(toggles: Toggles): string {
   return TOGGLE_NAMES.map(name => `${name}: ${toggles[name] ? 'on' : 'off'}`).join('\n')
 }
 
-const BAND_ORDER: readonly ToggleName[] = ['git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard', 'caveman', 'sound', 'statusline', 'statusline-color']
+const BAND_ORDER: readonly ToggleName[] = ['git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard', 'caveman', 'sound', 'session-log', 'statusline', 'statusline-color']
 
 /** The band text for the functions that are off, in fixed order; undefined when all are on. */
 export function offBandText(toggles: Toggles): string | undefined {

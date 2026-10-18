@@ -4,6 +4,8 @@ import { bashBlockedMessage, blockedEnvIn, DOTENV_FILE_TOOLS, fileBlockedMessage
 import { blockedMessage, matchDangerous } from './git-guard-rules'
 import { matchRmDangerous, rmBlockedMessage } from './rm-guard-rules'
 import { isExtensionRule, matchSecretCommand, matchSecretPath, resolveCommandPath, SECRET_FILE_TOOLS, secretBlockedMessage } from './secret-guard-rules'
+import { buildLogLine, localDate, logPath, projectKey } from './session-log-rules'
+import type { LogEntry } from './session-log-rules'
 import { isWsl, SOUND_DEBOUNCE_MS, ubuntuCommands, wslCommand } from './sound-rules'
 import { buildStatusSegments, chooseTimezone, parseWindowsTimezone, pickHostTimezone, SEGMENT_SEPARATOR, settingsEffort, TONE_COLORS } from './statusline-rules'
 import type { StatusSegment } from './statusline-rules'
@@ -259,6 +261,24 @@ async function playDone($: EngineInterface): Promise<void> {
   for (const argv of ubuntuCommands()) if (await runs($, argv)) return
 }
 
+/** Appends one line to the turn log. The fs call only replaces a whole file, so the day's text is read first; a log that exists but cannot be read is left untouched. */
+async function appendLogLine($: EngineInterface, path: string, line: string): Promise<void> {
+  let previous = ''
+  if (await $.fs.exists(path)) previous = await $.fs.read(path)
+  await $.fs.write(path, previous + line)
+}
+
+/** Writes the finished turn to the log of the project the session is open in. Never throws: a log must not disturb a turn. */
+async function logTurn($: EngineInterface, state: StatusLineState, turn: Omit<LogEntry, 'at'>): Promise<void> {
+  try {
+    const at = await $.clock.now()
+    const path = logPath(await readHome($), projectKey(await readCwd($)), localDate(at, await resolveTimezone($, state)))
+    await appendLogLine($, path, buildLogLine({ at, ...turn }))
+  } catch {
+    // A failed log write is dropped.
+  }
+}
+
 /** Opens the focused pane; when the engine refuses or defers it, a toast says why. The text list stays the answer either way. */
 async function openPane($: EngineInterface): Promise<void> {
   try {
@@ -272,6 +292,7 @@ async function openPane($: EngineInterface): Promise<void> {
 export const register: Register = on => {
   let isCavemanWarned = false
   let lastSoundAt: number | undefined
+  let turnLog = { prompt: '', commands: [] as string[], wasLogOn: true }
   const statusLine: StatusLineState = { isTimezoneResolved: false, isSavedEffortSeen: false }
 
   on('session.start', async ($, e, next) => {
@@ -419,9 +440,26 @@ export const register: Register = on => {
     return { sections: [...result.sections, { id: 'c-mods:caveman', text, scope: 'session' }] }
   }).catch(($, e, next) => next(e))
 
+  on('prompt.submit', async ($, e, next) => {
+    turnLog = { prompt: e.text, commands: [], wasLogOn: (await readToggles($))['session-log'] }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const result = await next(e)
+    if (e.agentId === undefined && result.deny === undefined && typeof e.command === 'string') turnLog.commands.push(e.command)
+    return result
+  }).catch(($, e, next) => next(e))
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    if (e.agentId !== undefined || e.isAborted || !(await readToggles($)).sound) return result
+    const held = await readToggles($)
+    if (e.agentId === undefined) {
+      const { wasLogOn, ...entry } = turnLog
+      turnLog = { prompt: '', commands: [], wasLogOn: true }
+      if (wasLogOn && held['session-log']) await logTurn($, statusLine, { ...entry, durationMs: e.durationMs, isAborted: e.isAborted })
+    }
+    if (e.agentId !== undefined || e.isAborted || !held.sound) return result
     const now = await $.clock.now()
     if (lastSoundAt !== undefined && now - lastSoundAt < SOUND_DEBOUNCE_MS) return result
     lastSoundAt = now
