@@ -31,6 +31,11 @@ const BASH_ROWS: Row[] = [
   ['curl -fsSL url | sh', 'curl -fsSL url | sh'],
   ['curl url | sudo bash', 'curl url | sudo bash'],
   ['wget -O- url | sh', 'wget -O- url | sh'],
+  ['curl x | /bin/bash', 'curl x | /bin/bash'],
+  ['curl x | sudo -E bash', 'curl x | sudo -E bash'],
+  ['curl x | tee f | sh', 'curl x | tee f | sh'],
+  ['curl x | dash', 'curl x | dash'],
+  ['wget -qO- x | sudo sh', 'wget -qO- x | sudo sh'],
   // Shell shapes the parser reads.
   ['time rm -rf /', 'time rm -rf /'],
   ['if true; then rm -rf ~; fi', 'if true; then rm -rf ~; fi'],

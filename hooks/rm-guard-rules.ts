@@ -1,6 +1,8 @@
 import { basename } from './bash-parser'
-import { simpleCommands } from './bash-text-rules'
+import type { ShellCommand } from './bash-text-rules'
+import { pipelineCommands, SHELLS, simpleCommands } from './bash-text-rules'
 
+/** Regex fallback for text the parser cannot read. */
 const PIPE_TO_SHELL = /\b(curl|wget)\b[^|;&\n]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/
 
 const PATTERN_RM = 'rm -rf <dangerous target>'
@@ -66,13 +68,26 @@ function matchSegment(segment: string, cwd: string): string | undefined {
   return matchProgram(program, args, cwd)
 }
 
+/** The program a command runs, past wrapper options such as the `-E` of `sudo -E bash`. */
+function runProgram(command: ShellCommand): string {
+  const head = [command.program ?? '', ...command.args].find(word => !word.startsWith('-')) ?? ''
+  return basename(head)
+}
+
+/** True when a pipeline downloads with curl or wget and a shell sits later in it. */
+function isDownloadToShell(pipeline: readonly ShellCommand[]): boolean {
+  const download = pipeline.findIndex(command => ['curl', 'wget'].includes(basename(command.program ?? '')))
+  return download !== -1 && pipeline.slice(download + 1).some(command => SHELLS.includes(runProgram(command)))
+}
+
 /**
  * The pattern a destructive part of the command matches, or undefined when it is safe. Each simple command
  * the shell would run is read through the shared parser, the program compared by base name; a command the
  * parser cannot read is split on its operators instead, so it still fails closed.
  */
 export function matchRmDangerous(command: string, cwd: string): string | undefined {
-  if (PIPE_TO_SHELL.test(command)) return PATTERN_PIPE
+  const pipelines = pipelineCommands(command)
+  if (pipelines === undefined ? PIPE_TO_SHELL.test(command) : pipelines.some(isDownloadToShell)) return PATTERN_PIPE
   const commands = simpleCommands(command)
   if (commands !== undefined) {
     for (const { program, args } of commands) {
