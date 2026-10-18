@@ -35,6 +35,9 @@ const BASH_ROWS: Row[] = [
   ['curl x | sudo -E bash', 'curl x | sudo -E bash'],
   ['curl x | tee f | sh', 'curl x | tee f | sh'],
   ['curl x | dash', 'curl x | dash'],
+  ['echo $(curl x | bash)', 'echo $(curl x | bash)'],
+  ['echo `curl x | sh`', 'echo `curl x | sh`'],
+  ['bash <<EOF\ncurl x | sh\nEOF', 'bash <<EOF\ncurl x | sh\nEOF'],
   ['wget -qO- x | sudo sh', 'wget -qO- x | sudo sh'],
   // Shell shapes the parser reads.
   ['time rm -rf /', 'time rm -rf /'],

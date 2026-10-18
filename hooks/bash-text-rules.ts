@@ -159,43 +159,43 @@ export type ShellCommand = {
 
 /**
  * The simple commands of a command string, or undefined when it cannot be parsed with confidence. Text a
- * shell runs is read as commands too: the heredoc bodies of a pipeline that feeds a shell, and command
- * substitutions. Quoted text passed to a shell is not, since `executedText` appends it already.
+ * shell runs is read as commands too (see `pipelineCommands`).
  */
 export function simpleCommands(command: string): ShellCommand[] | undefined {
-  try {
-    return commandsOf(command)
-  } catch (e) {
-    if (e instanceof Unparsable) return undefined
-    throw e
-  }
+  return pipelineCommands(command)?.flat()
 }
 
-/** The pipelines of a command string, each as its simple commands in order; undefined when it cannot be parsed with confidence. */
+/**
+ * The pipelines of a command string, each as its simple commands in order; undefined when it cannot be parsed
+ * with confidence. Text a shell runs is read as pipelines of its own, after the pipeline that holds it: the
+ * heredoc bodies of a pipeline that feeds a shell, and command substitutions. Quoted text passed to a shell
+ * is not, since `executedText` appends it already.
+ */
 export function pipelineCommands(command: string): ShellCommand[][] | undefined {
   try {
-    return parse(command).map(pipeline => pipeline.map(shellCommand))
+    return pipelinesOf(command)
   } catch (e) {
     if (e instanceof Unparsable) return undefined
     throw e
   }
 }
 
-function commandsOf(command: string): ShellCommand[] {
-  const commands: ShellCommand[] = []
+function pipelinesOf(command: string): ShellCommand[][] {
+  const pipelines: ShellCommand[][] = []
   for (const pipeline of parse(command)) {
     const lastShell = pipeline.findLastIndex(isShell)
+    const nested: ShellCommand[][] = []
     pipeline.forEach((simple, index) => {
-      commands.push(shellCommand(simple))
       for (const word of simple.words) {
-        if (word.runsCode) commands.push(...commandsOf(word.value.replace(/\$\(|\)|`/g, '\n')))
+        if (word.runsCode) nested.push(...pipelinesOf(word.value.replace(/\$\(|\)|`/g, '\n')))
       }
       if (index <= lastShell) {
-        for (const heredoc of simple.heredocs) commands.push(...commandsOf(command.slice(heredoc.start, heredoc.bodyEnd)))
+        for (const heredoc of simple.heredocs) nested.push(...pipelinesOf(command.slice(heredoc.start, heredoc.bodyEnd)))
       }
     })
+    pipelines.push(pipeline.map(shellCommand), ...nested)
   }
-  return commands
+  return pipelines
 }
 
 function shellCommand(command: SimpleCommand): ShellCommand {
