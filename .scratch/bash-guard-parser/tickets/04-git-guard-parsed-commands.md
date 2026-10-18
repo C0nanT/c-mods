@@ -11,11 +11,11 @@
 
 **Blocked by:** 01: Each Bash guard's tests prove that guard alone
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] Deny rows added first (red) for: `git clean -xdf`, `git clean -d -f`, `git clean --force`, `git reset HEAD~1 --hard`, `git reset -q --hard`, `git checkout HEAD -- .`, `git restore -s HEAD .`, `git branch --delete --force x`, `git branch -d -f x`, `git -P push`, `git --bare push`, `git --work-tree /x push origin main`, `git --git-dir /r push`, `"git" push`, `git p""ush`.
-- [ ] All existing git-guard rows (deny and pass) still hold, including `git restore .env.example`, `git checkout .github/workflows/ci.yml`, `git branch -d feature`, `git rm --cached …`, `git reset --soft HEAD~1`.
-- [ ] The unparsable-shapes tests for git-guard stay green.
-- [ ] git-guard's matcher keeps its signature; `register.ts` is unchanged.
-- [ ] The bare `push --force` / `reset --hard` rows and `clean -fd` stay in the fallback list (removal is later work), and no parsed decision depends on them.
-- [ ] `claude plugin validate .` and `claude plugin test .` pass.
+- [x] Deny rows added first (red) for: `git clean -xdf`, `git clean -d -f`, `git clean --force`, `git reset HEAD~1 --hard`, `git reset -q --hard`, `git checkout HEAD -- .`, `git restore -s HEAD .`, `git branch --delete --force x`, `git branch -d -f x`, `git -P push`, `git --bare push`, `git --work-tree /x push origin main`, `git --git-dir /r push`, `"git" push`, `git p""ush`.
+- [x] All existing git-guard rows (deny and pass) still hold, including `git restore .env.example`, `git checkout .github/workflows/ci.yml`, `git branch -d feature`, `git rm --cached …`, `git reset --soft HEAD~1`.
+- [x] The unparsable-shapes tests for git-guard stay green.
+- [x] git-guard's matcher keeps its signature; `register.ts` is unchanged.
+- [x] The bare `push --force` / `reset --hard` rows and `clean -fd` stay in the fallback list (removal is later work), and no parsed decision depends on them.
+- [x] `claude plugin validate .` and `claude plugin test .` pass.

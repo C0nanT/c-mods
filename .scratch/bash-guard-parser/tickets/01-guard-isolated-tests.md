@@ -11,11 +11,11 @@
 
 **Blocked by:** None (can start immediately)
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] rm-guard row tests run with git, dotenv and secret guards off; deny rows assert rm-guard's pattern name.
-- [ ] git-guard row tests run with dotenv, secret and rm guards off; deny rows assert git-guard's pattern.
-- [ ] One fail-closed Bash test per guard (git, dotenv, secret, rm), each asserting the exact `c-mods: <guard> failed, command blocked.` text.
-- [ ] Temporarily removing each Bash handler's fail-closed catch fails that guard's test (checked by hand, not committed).
-- [ ] The existing rows and the unparsable-shapes tests stay green.
-- [ ] `claude plugin validate .` and `claude plugin test .` pass.
+- [x] rm-guard row tests run with git, dotenv and secret guards off; deny rows assert rm-guard's pattern name.
+- [x] git-guard row tests run with dotenv, secret and rm guards off; deny rows assert git-guard's pattern.
+- [x] One fail-closed Bash test per guard (git, dotenv, secret, rm), each asserting the exact `c-mods: <guard> failed, command blocked.` text.
+- [x] Temporarily removing each Bash handler's fail-closed catch fails that guard's test (checked by hand, not committed).
+- [x] The existing rows and the unparsable-shapes tests stay green.
+- [x] `claude plugin validate .` and `claude plugin test .` pass.

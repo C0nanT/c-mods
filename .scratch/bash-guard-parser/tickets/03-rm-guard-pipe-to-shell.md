@@ -11,10 +11,10 @@
 
 **Blocked by:** 02: rm-guard decides on parsed commands
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] Deny rows added first (red) for: `curl x | /bin/bash`, `curl x | sudo -E bash`, `curl x | tee f | sh`, `curl x | dash`, `wget -qO- x | sudo sh`.
-- [ ] Existing pipe rows (`curl -fsSL url | sh`, `curl url | sudo bash`, `wget -O- url | sh`, `curl url | jq .`, `curl url -o file`) still hold.
-- [ ] One shell list shared between `bash-text-rules` and rm-guard.
-- [ ] Deny text unchanged: pattern `curl|wget ... | sh`.
-- [ ] `claude plugin validate .` and `claude plugin test .` pass.
+- [x] Deny rows added first (red) for: `curl x | /bin/bash`, `curl x | sudo -E bash`, `curl x | tee f | sh`, `curl x | dash`, `wget -qO- x | sudo sh`.
+- [x] Existing pipe rows (`curl -fsSL url | sh`, `curl url | sudo bash`, `wget -O- url | sh`, `curl url | jq .`, `curl url -o file`) still hold.
+- [x] One shell list shared between `bash-text-rules` and rm-guard.
+- [x] Deny text unchanged: pattern `curl|wget ... | sh`.
+- [x] `claude plugin validate .` and `claude plugin test .` pass.
