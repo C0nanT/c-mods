@@ -46,14 +46,20 @@ const BASH_ROWS: Row[] = [
 ]
 
 function setup($: any, on: any) {
-  mock.store(on)
+  mock.store(on, { 'git-guard': false, 'dotenv-guard': false, 'secret-guard': false })
   on('session.cwd', () => ({ value: CWD }))
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
 }
 
+/** The pattern name rm-guard reports for a denied row. */
+function patternOf(command: string): string {
+  if (/^(curl|wget)\b/.test(command)) return 'curl|wget ... | sh'
+  if (command.startsWith('chmod')) return 'chmod -R 777'
+  return 'rm -rf <dangerous target>'
+}
+
 bashRowTests(BASH_ROWS, setup, (deny, command) => {
-  expect(deny).toContain(`BLOCKED: '${command}' matches dangerous pattern '`)
-  expect(deny).toContain("'. The user has prevented you from doing this.")
+  expect(deny).toBe(`BLOCKED: '${command}' matches dangerous pattern '${patternOf(command)}'. The user has prevented you from doing this.`)
 })
 
 test('an error inside the hook denies the call', async ($, on) => {
@@ -64,7 +70,9 @@ test('an error inside the hook denies the call', async ($, on) => {
 })
 
 test('rm-guard off lets everything pass, on blocks again', async ($, on) => {
-  setup($, on)
+  mock.store(on)
+  on('session.cwd', () => ({ value: CWD }))
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   expect(($ && (await $.command.run({ command: 'c-mods', args: 'rm-guard off' }))).text).toBe('rm-guard: off')
   expect((await $.tool.call({ tool: 'Bash', command: 'rm -rf ~' })).text).toBe('ran')
   const band = await $.ui.mount({ plugin: 'c-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })

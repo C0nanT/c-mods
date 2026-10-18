@@ -47,15 +47,20 @@ const BASH_ROWS: Row[] = [
   ['git diff', PASS],
 ]
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 bashRowTests(
   BASH_ROWS,
   (_, on) => {
-    mock.store(on)
+    mock.store(on, { 'dotenv-guard': false, 'secret-guard': false, 'rm-guard': false })
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   },
   (deny, command) => {
-    expect(deny).toContain(`BLOCKED: '${command}' matches dangerous pattern '`)
-    expect(deny).toContain("'. The user has prevented you from doing this.")
+    // git-guard's own pattern: a git regex or one of its two bare rows, never rm-guard's names.
+    expect(deny).toMatch(new RegExp(`^BLOCKED: '${escapeRegExp(command)}' matches dangerous pattern '(git\\(|push --force'|reset --hard')`))
+    expect(deny).toMatch(/'\. The user has prevented you from doing this\.$/)
   },
 )
 
