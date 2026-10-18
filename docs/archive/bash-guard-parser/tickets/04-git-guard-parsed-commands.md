@@ -11,7 +11,7 @@
 
 **Blocked by:** 01: Each Bash guard's tests prove that guard alone
 
-Status: ready-for-human
+Status: done
 
 - [x] Deny rows added first (red) for: `git clean -xdf`, `git clean -d -f`, `git clean --force`, `git reset HEAD~1 --hard`, `git reset -q --hard`, `git checkout HEAD -- .`, `git restore -s HEAD .`, `git branch --delete --force x`, `git branch -d -f x`, `git -P push`, `git --bare push`, `git --work-tree /x push origin main`, `git --git-dir /r push`, `"git" push`, `git p""ush`.
 - [x] All existing git-guard rows (deny and pass) still hold, including `git restore .env.example`, `git checkout .github/workflows/ci.yml`, `git branch -d feature`, `git rm --cached …`, `git reset --soft HEAD~1`.

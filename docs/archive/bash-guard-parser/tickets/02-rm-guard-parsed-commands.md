@@ -11,7 +11,7 @@
 
 **Blocked by:** 01: Each Bash guard's tests prove that guard alone
 
-Status: ready-for-human
+Status: done
 
 - [x] Deny rows added first (red) for: `time rm -rf /`, `if true; then rm -rf ~; fi`, `for d in x; do rm -rf ~; done`, `{ rm -rf ~; }`, `(rm -rf ~)`, `echo $(rm -rf ~)`, `` echo `rm -rf ~` ``, `! rm -rf /`, `/bin/rm -rf ~`, `\rm -rf ~`, `rm -rf "$HOME"/`, `time chmod -R 777 .`.
 - [x] All existing rm-guard rows (deny and pass) still hold.

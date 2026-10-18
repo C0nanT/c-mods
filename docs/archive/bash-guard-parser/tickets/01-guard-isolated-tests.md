@@ -11,7 +11,7 @@
 
 **Blocked by:** None (can start immediately)
 
-Status: ready-for-human
+Status: done
 
 - [x] rm-guard row tests run with git, dotenv and secret guards off; deny rows assert rm-guard's pattern name.
 - [x] git-guard row tests run with dotenv, secret and rm guards off; deny rows assert git-guard's pattern.

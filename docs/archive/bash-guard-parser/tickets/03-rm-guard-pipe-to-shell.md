@@ -11,7 +11,7 @@
 
 **Blocked by:** 02: rm-guard decides on parsed commands
 
-Status: ready-for-human
+Status: done
 
 - [x] Deny rows added first (red) for: `curl x | /bin/bash`, `curl x | sudo -E bash`, `curl x | tee f | sh`, `curl x | dash`, `wget -qO- x | sudo sh`.
 - [x] Existing pipe rows (`curl -fsSL url | sh`, `curl url | sudo bash`, `wget -O- url | sh`, `curl url | jq .`, `curl url -o file`) still hold.

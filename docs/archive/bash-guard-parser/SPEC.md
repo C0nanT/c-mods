@@ -1,6 +1,6 @@
 # Bash guards decide on parsed commands
 
-Status: ready-for-agent
+Status: done
 
 Source: tech-debt map `.scratch/tech-debt-map/bash-guards/2026-10-18.md`, rows 4, 1, 5, 2. Assumed-confirmed (user moved on to `/to-tickets` without correcting): row 5 in scope, row 8 out; one seam; deny text unchanged.
 
