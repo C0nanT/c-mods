@@ -25,6 +25,52 @@ const BASH_ROWS: Row[] = [
   ['git --no-pager reset --hard HEAD~1', 'git --no-pager reset --hard HEAD~1'],
   ['git --git-dir=/repo/.git push', 'git --git-dir=/repo/.git push'],
   ['git -c user.name=y push', 'git -c user.name=y push'],
+  // Denied however the flags are spelled or ordered.
+  ['git clean -xdf', 'git clean -xdf'],
+  ['git clean -d -f', 'git clean -d -f'],
+  ['git clean --force', 'git clean --force'],
+  ['git reset HEAD~1 --hard', 'git reset HEAD~1 --hard'],
+  ['git reset -q --hard', 'git reset -q --hard'],
+  ['git checkout HEAD -- .', 'git checkout HEAD -- .'],
+  ['git restore -s HEAD .', 'git restore -s HEAD .'],
+  ['git branch --delete --force x', 'git branch --delete --force x'],
+  ['git branch -d -f x', 'git branch -d -f x'],
+  // Denied behind any global option, and with the program or subcommand quoted.
+  ['git -P push', 'git -P push'],
+  ['git --bare push', 'git --bare push'],
+  ['git --work-tree /x push origin main', 'git --work-tree /x push origin main'],
+  ['git --git-dir /r push', 'git --git-dir /r push'],
+  ['"git" push', '"git" push'],
+  ['git p""ush', 'git p""ush'],
+  // Denied behind wrappers and launchers, as before the parser read them.
+  ['sudo -u root git push', 'sudo -u root git push'],
+  ['env -i git push', 'env -i git push'],
+  ['xargs git push', 'xargs git push'],
+  ['timeout 5 git push', 'timeout 5 git push'],
+  ['find . -exec git push \\;', 'find . -exec git push \\;'],
+  ['sudo -u git -H git push', 'sudo -u git -H git push'],
+  ['sudo -u git git push', 'sudo -u git git push'],
+  ['find . -name git -exec git push \\;', 'find . -name git -exec git push \\;'],
+  // Denied inside other shell shapes.
+  ['f() { git push; }; f', 'f() { git push; }; f'],
+  ['case x in x) git push;; esac', 'case x in x) git push;; esac'],
+  ['cat <(git push)', 'cat <(git push)'],
+  // Denied in a heredoc body fed to a program that may run it, and in the text `watch` runs.
+  ['at now <<EOF\ngit push\nEOF', 'at now <<EOF\ngit push\nEOF'],
+  ['sudo -s <<EOF\ngit push\nEOF', 'sudo -s <<EOF\ngit push\nEOF'],
+  ["cat <<'EOF' | sudo -s\ngit push\nEOF", "cat <<'EOF' | sudo -s\ngit push\nEOF"],
+  ['make -f - <<EOF\nall:\n\tgit push\nEOF', 'make -f - <<EOF\nall:\n\tgit push\nEOF'],
+  ["watch 'git push'", "watch 'git push'"],
+  ["watch -n 5 'git push'", "watch -n 5 'git push'"],
+  // Denied in a substitution inside an unquoted heredoc body: bash runs it while reading the body, whoever reads it.
+  ['cat > f <<EOF\n$(git push)\nEOF', 'cat > f <<EOF\n$(git push)\nEOF'],
+  ['cat > f <<EOF\n`git push`\nEOF', 'cat > f <<EOF\n`git push`\nEOF'],
+  ['echo "$(cat <<EOF\n$(git push)\nEOF\n)"', 'echo "$(cat <<EOF\n$(git push)\nEOF\n)"'],
+  // Denied in a substitution next to quoted or escaped text that looks like an escape or an opening.
+  ['echo \\\\$(git push)', 'echo \\\\$(git push)'],
+  ["echo '\\'$(git push)", "echo '\\'$(git push)"],
+  ["echo '$('$(git push)", "echo '$('$(git push)"],
+  ['echo `echo \\`git push\\``', 'echo `echo \\`git push\\``'],
   // Allowed.
   ['git commit -m x', PASS],
   ['git -c user.email=x -c user.name=y commit -m x', PASS],
@@ -35,6 +81,9 @@ const BASH_ROWS: Row[] = [
   ['git restore ./src/a.ts', PASS],
   ['git checkout .github/workflows/ci.yml', PASS],
   ['git restore --source=abc123 --worktree -- src/a.ts', PASS],
+  ['git checkout -b x .', PASS], // with -b, git reads `.` as the start point and refuses to touch paths.
+  ['git log --grep="reset --hard"', PASS],
+  ['git commit -m "push --force"', PASS],
   ['git switch -C feature main', PASS],
   ['git worktree add -b feature ../wt main', PASS],
   ['git branch -d feature', PASS],
@@ -45,17 +94,41 @@ const BASH_ROWS: Row[] = [
   ['git -C /tmp status', PASS],
   ['git --no-pager log', PASS],
   ['git diff', PASS],
+  // A heredoc body read as text, not run.
+  ['cat <<EOF\ngit push\nEOF', PASS],
+  ['tee notes.md <<EOF\ngit push\nEOF', PASS],
+  ["cat <<'EOF' | grep push\ngit push\nEOF", PASS],
+  ['python3 - <<EOF\nprint("git push")\nEOF', PASS],
+  ['git commit -F - <<EOF\ngit push\nEOF', PASS],
+  ["watch 'git status'", PASS],
+  ["cat > f <<'EOF'\n$(git push)\nEOF", PASS],
+  ['cat > f <<"EOF"\n$(git push)\nEOF', PASS],
+  ["cat > f <<EOF\ndon't $(git status)\nEOF", PASS],
 ]
+
+/** `git`, its global options, then the subcommand: the start of every pattern git-guard reports. */
+const PREFIX = String.raw`git(\s+(-c\s+\S+|-C\s+\S+|--git-dir=\S+|--work-tree=\S+|--namespace=\S+|--no-pager|--literal-pathspecs))*\s+`
+const WHOLE_TREE = String.raw`(\s+-\S+)*\s+\.(?=\s|$|[;&|])`
+
+/** The pattern git-guard reports for a denied row, by the subcommand the row runs. */
+function patternOf(command: string): string {
+  if (/\bpush\b|p""ush/.test(command)) return String.raw`${PREFIX}push(?![\w-])`
+  if (/\breset\b/.test(command)) return `${PREFIX}reset --hard`
+  if (/\bclean\b/.test(command)) return `${PREFIX}clean -f`
+  if (/\bbranch\b/.test(command)) return `${PREFIX}branch -D`
+  if (/\bcheckout\b/.test(command)) return `${PREFIX}checkout${WHOLE_TREE}`
+  if (/\brestore\b/.test(command)) return `${PREFIX}restore${WHOLE_TREE}`
+  return String.raw`${PREFIX}rm(?![\w-])(?![^;&|\n]*--cached)`
+}
 
 bashRowTests(
   BASH_ROWS,
   (_, on) => {
-    mock.store(on)
+    mock.store(on, { 'dotenv-guard': false, 'secret-guard': false, 'rm-guard': false })
     on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   },
   (deny, command) => {
-    expect(deny).toContain(`BLOCKED: '${command}' matches dangerous pattern '`)
-    expect(deny).toContain("'. The user has prevented you from doing this.")
+    expect(deny).toBe(`BLOCKED: '${command}' matches dangerous pattern '${patternOf(command)}'. The user has prevented you from doing this.`)
   },
 )
 

@@ -1,3 +1,8 @@
+import { basename } from './bash-parser'
+import type { ShellCommand } from './bash-text-rules'
+import { pipelineCommands, SHELLS } from './bash-text-rules'
+
+/** Regex fallback for text the parser cannot read. */
 const PIPE_TO_SHELL = /\b(curl|wget)\b[^|;&\n]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/
 
 const PATTERN_RM = 'rm -rf <dangerous target>'
@@ -17,7 +22,7 @@ function fold(path: string): string {
   return `/${parts.join('/')}`
 }
 
-/** The words of one simple command, quotes removed, leading `VAR=x`, `sudo` and the like skipped. */
+/** Fallback reading for text the parser cannot read: the words of one segment, leading `VAR=x`, `sudo` and the like skipped. */
 function words(segment: string): string[] {
   const all = segment.trim().split(/\s+/).filter(Boolean).map(word => word.replace(/^["']|["']$/g, ''))
   let start = 0
@@ -41,8 +46,8 @@ function isDangerousTarget(target: string, cwd: string): boolean {
   return false
 }
 
-function matchSegment(segment: string, cwd: string): string | undefined {
-  const [program, ...args] = words(segment)
+/** The pattern one command matches, given its program's base name and its arguments. */
+function matchProgram(program: string | undefined, args: readonly string[], cwd: string): string | undefined {
   if (program === 'rm') {
     const flags = flagLetters(args)
     const isRecursive = args.includes('--recursive') || /[rR]/.test(flags)
@@ -58,14 +63,50 @@ function matchSegment(segment: string, cwd: string): string | undefined {
   return undefined
 }
 
-/** The pattern a destructive part of the command matches, or undefined when it is safe. */
-export function matchRmDangerous(command: string, cwd: string): string | undefined {
+function matchSegment(segment: string, cwd: string): string | undefined {
+  const [program, ...args] = words(segment)
+  return matchProgram(program, args, cwd)
+}
+
+/** The program a command runs, past wrapper options such as the `-E` of `sudo -E bash`. */
+function runProgram(command: ShellCommand): string {
+  const head = [command.program ?? '', ...command.args].find(word => !word.startsWith('-')) ?? ''
+  return basename(head)
+}
+
+/** True when a pipeline downloads with curl or wget and a shell sits later in it. */
+function isDownloadToShell(pipeline: readonly ShellCommand[]): boolean {
+  const download = pipeline.findIndex(command => ['curl', 'wget'].includes(basename(command.program ?? '')))
+  return download !== -1 && pipeline.slice(download + 1).some(command => SHELLS.includes(runProgram(command)))
+}
+
+/** The pattern the parsed pipelines match: a download piped into a shell, or a destructive program by base name. */
+function matchParsed(pipelines: readonly ShellCommand[][], cwd: string): string | undefined {
+  if (pipelines.some(isDownloadToShell)) return PATTERN_PIPE
+  for (const { program, args } of pipelines.flat()) {
+    const pattern = matchProgram(program === undefined ? undefined : basename(program), args, cwd)
+    if (pattern !== undefined) return pattern
+  }
+  return undefined
+}
+
+/** The pattern text the parser cannot read matches, split on its operators so it still fails closed. */
+function matchUnparsed(command: string, cwd: string): string | undefined {
   if (PIPE_TO_SHELL.test(command)) return PATTERN_PIPE
   for (const segment of command.split(/&&|\|\||[;|&\n]/)) {
     const pattern = matchSegment(segment, cwd)
     if (pattern !== undefined) return pattern
   }
   return undefined
+}
+
+/**
+ * The pattern a destructive part of the command matches, or undefined when it is safe. The command is read
+ * once through the shared parser; a command the parser cannot read falls back to the regex reading.
+ */
+export function matchRmDangerous(command: string, cwd: string): string | undefined {
+  const pipelines = pipelineCommands(command)
+  return pipelines === undefined ? matchUnparsed(command, cwd) : matchParsed(pipelines, cwd)
 }
 
 export function rmBlockedMessage(command: string, pattern: string): string {

@@ -10,7 +10,7 @@
 
 **Blocked by:** 01
 
-Status: ready-for-human
+Status: done
 
 - [x] One table per guard, same row shape as the dotenv table
 - [x] Allowed and denied rows sit together per guard

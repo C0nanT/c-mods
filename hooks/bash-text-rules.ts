@@ -3,15 +3,17 @@
  * are removed: heredoc bodies fed to `cat`, `tee`, an interpreter or `git commit`, `git commit` messages,
  * and the code of `node -e`, `python -c`, `ruby -e` and `perl -e`, as long as the pipeline after them
  * only prints or counts text. Every other program keeps its text, so an unknown one never opens a hole.
- * Anything that reaches a shell (`bash <<EOF`, `sh -c '...'`, `eval '...'`, `... | bash`) is kept, and its
- * quoted text is appended as a command of its own. A command `bash-parser` cannot parse with confidence is
- * returned whole, so the guards stay closed.
+ * Anything that reaches a shell (`bash <<EOF`, `sh -c '...'`, `eval '...'`, `... | bash`, `watch '...'`) is
+ * kept, and its quoted text is appended as a command of its own. A command `bash-parser` cannot parse with
+ * confidence is returned whole, so the guards stay closed.
  */
-import { basename, parse, Unparsable } from './bash-parser'
+import { basename, parse, substitutionsIn, Unparsable } from './bash-parser'
 import type { SimpleCommand, Word } from './bash-parser'
 
 /** Programs that run text they are given: their heredocs and quoted words are analysed as commands. */
-const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', 'ssh', 'su']
+export const SHELLS = ['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'fish', 'eval', 'source', 'ssh', 'su']
+/** Programs that run their arguments as shell text, though not their stdin: their quoted words are analysed as commands. */
+const ARGUMENT_SHELLS = ['watch']
 /** Programs whose heredoc body is inert, besides the interpreters and `git commit`. */
 const HEREDOC_READERS = ['cat', 'tee']
 /** Programs that may follow an inert span in a pipeline: they print or count text, never run it. */
@@ -100,16 +102,36 @@ function commitMessages(args: readonly Word[]): Word[] {
   return messages
 }
 
-/** The spans of one command that the shell does not execute: interpreter code, commit messages, heredocs fed to a reader. */
-function inertSpans(command: SimpleCommand): { start: number; end: number }[] {
+/** What one command reads as text rather than runs: interpreter code or commit messages, and whether its heredoc is text. */
+function readsAsText(command: SimpleCommand): { words: Word[]; readsHeredoc: boolean } {
   const program = programOf(command)
-  if (program === undefined) return []
+  if (program === undefined) return { words: [], readsHeredoc: false }
   const flags = /^python[0-9.]*$/.test(program.name) ? ['-c'] : INTERPRETER_CODE_FLAGS[program.name]
   const commit = program.name === 'git' ? commitArgs(program.args) : undefined
   const words = flags !== undefined ? interpreterCode(flags, program.args) : commit !== undefined ? commitMessages(commit) : []
-  const readsHeredoc = flags !== undefined || commit !== undefined || HEREDOC_READERS.includes(program.name)
+  return { words, readsHeredoc: flags !== undefined || commit !== undefined || HEREDOC_READERS.includes(program.name) }
+}
+
+/** The spans of one command that the shell does not execute: interpreter code, commit messages, heredocs fed to a reader. */
+function inertSpans(command: SimpleCommand): { start: number; end: number }[] {
+  const { words, readsHeredoc } = readsAsText(command)
   return [...words.filter(word => !word.runsCode), ...(readsHeredoc ? command.heredocs.filter(heredoc => !heredoc.runsCode) : [])]
 }
+
+/** True when the inert spans of the command at `index` are left out of the executed text; see `executedText`. */
+const isInertAt = (pipeline: readonly SimpleCommand[], index: number, lastShell: number) =>
+  index > lastShell && feedsOnlyReaders(pipeline, index)
+
+/**
+ * True when the heredoc bodies of the command at `index` may run: the command, or one later in the pipeline,
+ * is a shell or a program that is not known to read its heredoc as text (`at`, `sudo -s`, `make -f -`).
+ */
+const runsHeredocAt = (pipeline: readonly SimpleCommand[], index: number, lastShell: number) =>
+  !isInertAt(pipeline, index, lastShell) || !readsAsText(pipeline[index]).readsHeredoc
+
+/** The quoted words a shell may run as commands: those of a shell's pipeline up to the shell, and those of `watch`. */
+const runsQuotedWordsAt = (pipeline: readonly SimpleCommand[], index: number, lastShell: number) =>
+  index <= lastShell || ARGUMENT_SHELLS.includes(programOf(pipeline[index])?.name ?? '')
 
 /** True when every command after `index` only prints or counts the text it is piped. */
 function feedsOnlyReaders(pipeline: readonly SimpleCommand[], index: number): boolean {
@@ -130,8 +152,8 @@ export function executedText(command: string): string {
   for (const pipeline of pipelines) {
     const lastShell = pipeline.findLastIndex(isShell)
     pipeline.forEach((simple, index) => {
-      if (index <= lastShell) shellText.push(...simple.words.filter(word => word.isQuoted).map(word => word.value))
-      else if (feedsOnlyReaders(pipeline, index)) spans.push(...inertSpans(simple))
+      if (runsQuotedWordsAt(pipeline, index, lastShell)) shellText.push(...simple.words.filter(word => word.isQuoted).map(word => word.value))
+      if (isInertAt(pipeline, index, lastShell)) spans.push(...inertSpans(simple))
     })
   }
   spans.sort((a, b) => a.start - b.start)
@@ -159,33 +181,70 @@ export type ShellCommand = {
 
 /**
  * The simple commands of a command string, or undefined when it cannot be parsed with confidence. Text a
- * shell runs is read as commands too: the heredoc bodies of a pipeline that feeds a shell, and command
- * substitutions. Quoted text passed to a shell is not, since `executedText` appends it already.
+ * shell runs is read as commands too (see `pipelineCommands`).
  */
 export function simpleCommands(command: string): ShellCommand[] | undefined {
+  return pipelineCommands(command)?.flat()
+}
+
+/**
+ * The pipelines of a command string, each as its simple commands in order; undefined when it cannot be parsed
+ * with confidence. Text a shell runs is read as pipelines of its own, after the pipeline that holds it: command
+ * substitutions, and the heredoc bodies fed to a shell or to a program not known to read them as text, such
+ * as `at` or `sudo -s` (the bodies `executedText` keeps, bar a text body that holds a substitution). In an
+ * unquoted body read as text, the substitutions are still read, since bash runs them while reading the body.
+ * The arguments of `watch` are read as the command it runs. A body or substitution that cannot be parsed makes
+ * the whole command unparsable. Quoted text passed to a shell is not, since `executedText` appends it already.
+ */
+export function pipelineCommands(command: string): ShellCommand[][] | undefined {
   try {
-    return commandsOf(command)
+    return pipelinesOf(command)
   } catch (e) {
     if (e instanceof Unparsable) return undefined
     throw e
   }
 }
 
-function commandsOf(command: string): ShellCommand[] {
-  const commands: ShellCommand[] = []
+function pipelinesOf(command: string): ShellCommand[][] {
+  const pipelines: ShellCommand[][] = []
   for (const pipeline of parse(command)) {
     const lastShell = pipeline.findLastIndex(isShell)
+    const nested: ShellCommand[][] = []
     pipeline.forEach((simple, index) => {
-      commands.push(shellCommand(simple))
       for (const word of simple.words) {
-        if (word.runsCode) commands.push(...commandsOf(word.value.replace(/\$\(|\)|`/g, '\n')))
+        nested.push(...word.substitutions.flatMap(pipelinesOf))
       }
-      if (index <= lastShell) {
-        for (const heredoc of simple.heredocs) commands.push(...commandsOf(command.slice(heredoc.start, heredoc.bodyEnd)))
+      const runsBodies = runsHeredocAt(pipeline, index, lastShell)
+      for (const heredoc of simple.heredocs) {
+        const body = command.slice(heredoc.start, heredoc.bodyEnd)
+        if (runsBodies) nested.push(...pipelinesOf(body))
+        else if (heredoc.runsCode) nested.push(...substitutionsIn(body).flatMap(pipelinesOf))
       }
+      const watched = watchedCommand(simple)
+      if (watched !== undefined) nested.push(...pipelinesOf(watched))
     })
+    pipelines.push(pipeline.map(shellCommand), ...nested)
   }
-  return commands
+  return pipelines
+}
+
+/** `watch` options that take the next word as their value. */
+const WATCH_VALUE_OPTIONS = ['-n', '--interval', '-q', '--equexit']
+
+/**
+ * The shell text an `ARGUMENT_SHELLS` program runs: its arguments past its own options, joined with spaces as
+ * `watch` joins them before it hands them to `sh -c`; undefined for any other program.
+ */
+function watchedCommand(command: SimpleCommand): string | undefined {
+  const program = programOf(command)
+  if (program === undefined || !ARGUMENT_SHELLS.includes(program.name)) return undefined
+  const rest = program.args.map(word => word.value)
+  while (rest.length > 0 && rest[0].startsWith('-')) {
+    const option = rest.shift()
+    if (option === '--') break
+    if (WATCH_VALUE_OPTIONS.includes(option ?? '')) rest.shift()
+  }
+  return rest.join(' ')
 }
 
 function shellCommand(command: SimpleCommand): ShellCommand {

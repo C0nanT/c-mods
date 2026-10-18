@@ -52,6 +52,26 @@ function failClosed($: EngineInterface, e: unknown, next: ((e: unknown) => unkno
   return next.called ? next(e) : { deny: `${$.plugin.name}: ${guard} failed, ${noun} blocked.` }
 }
 
+/** One toggle, by the same rule as readToggles: session state first, then that one store key; absent means on. */
+async function readToggle($: EngineInterface, name: ToggleName): Promise<boolean> {
+  const { value } = await $.state.get(toggles)
+  const held = value?.[name]
+  return typeof held === 'boolean' ? held : (await $.store.get(name)) !== false
+}
+
+/**
+ * One Bash guard under its own fail-closed catch: undefined when the guard is off or lets the command
+ * pass, its deny when it blocks, and `<plugin>: <guard> failed, command blocked.` when it throws.
+ */
+async function runBashGuard($: EngineInterface, guard: ToggleName, decide: () => Promise<{ deny: string } | undefined>): Promise<{ deny: string } | undefined> {
+  try {
+    if (!(await readToggle($, guard))) return undefined
+    return await decide()
+  } catch {
+    return { deny: `${$.plugin.name}: ${guard} failed, command blocked.` }
+  }
+}
+
 /** The dotenv-guard denial for a file tool's or Grep's path input; undefined when it may pass. */
 function envPathDenial(path: unknown): { deny: string } | undefined {
   return typeof path === 'string' && path !== '' && isBlockedEnvPath(path) ? { deny: fileBlockedMessage(path) } : undefined
@@ -380,11 +400,32 @@ export const register: Register = on => {
     return Box({ flexDirection: 'column', children: offBand === undefined ? [status] : [status, offBand] })
   })
 
+  // The four Bash guards share one handler: the engine asks only one `.catch` per call, so each guard
+  // runs under its own catch here and a failure names the guard that failed. The first deny wins.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!(await readToggles($))['git-guard']) return next(e)
-    const pattern = matchDangerous(executedText(e.command))
-    return pattern === undefined ? next(e) : { deny: blockedMessage(e.command, pattern) }
-  }).catch(($, e, next) => failClosed($, e, next, 'git-guard', 'command'))
+    const denial =
+      (await runBashGuard($, 'git-guard', async () => {
+        const pattern = matchDangerous(executedText(e.command))
+        return pattern === undefined ? undefined : { deny: blockedMessage(e.command, pattern) }
+      })) ??
+      (await runBashGuard($, 'dotenv-guard', async () => {
+        const word = blockedEnvIn(executedText(e.command))
+        return word === undefined ? undefined : { deny: bashBlockedMessage(word) }
+      })) ??
+      (await runBashGuard($, 'secret-guard', async () => {
+        const home = await readHome($)
+        for (const match of matchSecretCommand(executedText(e.command), home)) {
+          if (isExtensionRule(match.rule) && !(await pathExists($, resolveCommandPath(match.path, home, await readCwd($))))) continue
+          return { deny: secretBlockedMessage(match.path, match.rule) }
+        }
+        return undefined
+      })) ??
+      (await runBashGuard($, 'rm-guard', async () => {
+        const pattern = matchRmDangerous(executedText(e.command), await readCwd($))
+        return pattern === undefined ? undefined : { deny: rmBlockedMessage(e.command, pattern) }
+      }))
+    return denial ?? next(e)
+  }).catch(($, e, next) => failClosed($, e, next, 'bash guards', 'command'))
 
   on('tool.call', { tool: [...DOTENV_FILE_TOOLS] }, async ($, e, next) => {
     if (!(await readToggles($))['dotenv-guard']) return next(e)
@@ -396,12 +437,6 @@ export const register: Register = on => {
     return envPathDenial(e.path) ?? next(e)
   }).catch(($, e, next) => failClosed($, e, next, 'dotenv-guard', 'call'))
 
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!(await readToggles($))['dotenv-guard']) return next(e)
-    const word = blockedEnvIn(executedText(e.command))
-    return word === undefined ? next(e) : { deny: bashBlockedMessage(word) }
-  }).catch(($, e, next) => failClosed($, e, next, 'dotenv-guard', 'command'))
-
   on('tool.call', { tool: [...SECRET_FILE_TOOLS] }, async ($, e, next) => {
     if (!(await readToggles($))['secret-guard']) return next(e)
     const path = typeof e.file_path === 'string' ? e.file_path : ''
@@ -409,22 +444,6 @@ export const register: Register = on => {
     const rule = matchSecretPath(path, await readHome($))
     return rule === undefined ? next(e) : { deny: secretBlockedMessage(path, rule) }
   }).catch(($, e, next) => failClosed($, e, next, 'secret-guard', 'call'))
-
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!(await readToggles($))['secret-guard']) return next(e)
-    const home = await readHome($)
-    for (const match of matchSecretCommand(executedText(e.command), home)) {
-      if (isExtensionRule(match.rule) && !(await pathExists($, resolveCommandPath(match.path, home, await readCwd($))))) continue
-      return { deny: secretBlockedMessage(match.path, match.rule) }
-    }
-    return next(e)
-  }).catch(($, e, next) => failClosed($, e, next, 'secret-guard', 'command'))
-
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!(await readToggles($))['rm-guard']) return next(e)
-    const pattern = matchRmDangerous(executedText(e.command), await readCwd($))
-    return pattern === undefined ? next(e) : { deny: rmBlockedMessage(e.command, pattern) }
-  }).catch(($, e, next) => failClosed($, e, next, 'rm-guard', 'command'))
 
   on('prompt.compose', async ($, e, next) => {
     const result = await next(e)

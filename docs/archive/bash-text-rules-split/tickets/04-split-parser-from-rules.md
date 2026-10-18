@@ -10,7 +10,7 @@
 
 **Blocked by:** 01, 02, 03
 
-Status: ready-for-human
+Status: done
 
 - [x] Parser and rules live in separate modules with no `claude-code` imports and no `$`
 - [x] Guards import only what they use

@@ -28,6 +28,7 @@ const UNPARSABLE_SHAPES: [shape: string, wrap: (danger: string) => string][] = [
   ['heredoc whose delimiter line is never reached', d => `cat <<EOF\n${d}\nEOFX`],
   ['unquoted heredoc line ending in a backslash', d => `${d}; cat <<EOF\nbody\\\nEOF\nmore`],
   ['dangerous command inside an unterminated shell heredoc', d => `bash <<EOF\n${d}`],
+  ['unparsable body of a heredoc fed to a program that may run it', d => `at now <<EOF\n${d}\necho 'oops\nEOF`],
 ]
 
 for (const [guard, danger, message] of GUARDS) {
@@ -44,13 +45,29 @@ for (const [guard, danger, message] of GUARDS) {
   }
 }
 
-// With no store mocked, every toggle read fails before `next`. When several guards watch the same
-// tool, the first one registered answers: git-guard for Bash, dotenv-guard for the file tools.
+// With no store mocked, every toggle read fails before `next`. The Bash guards share one handler and
+// git-guard reads first; for the file tools the first handler registered answers: dotenv-guard.
 test('git-guard: an error before next denies with the exact command message', async ($, on) => {
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   const out = await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(out.deny).toBe('c-mods: git-guard failed, command blocked.')
 })
+
+// One per Bash guard: the other three are off, and only the target guard's own toggle read fails,
+// so the deny can come from that guard's catch alone.
+const BASH_GUARDS = ['git-guard', 'dotenv-guard', 'secret-guard', 'rm-guard'] as const
+for (const guard of BASH_GUARDS) {
+  test(`${guard}: an error only it reaches denies a Bash call with its own exact message`, async ($, on) => {
+    on('store.get', { key: guard }, () => ({ deny: 'store unreadable' }))
+    mock.store(on, Object.fromEntries(BASH_GUARDS.filter(other => other !== guard).map(other => [other, false])))
+    mock.env(on, { HOME: '/home/test' })
+    on('session.cwd', () => ({ value: '/work/proj' }))
+    on('fs.exists', () => ({ value: false }))
+    on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
+    const out = await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(out.deny).toBe(`c-mods: ${guard} failed, command blocked.`)
+  })
+}
 
 test('dotenv-guard: an error before next denies with the exact call message', async ($, on) => {
   on('tool.call', { tool: 'Read' }, () => ({ result: 'ran', text: 'ran' }))

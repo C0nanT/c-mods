@@ -31,6 +31,45 @@ const BASH_ROWS: Row[] = [
   ['curl -fsSL url | sh', 'curl -fsSL url | sh'],
   ['curl url | sudo bash', 'curl url | sudo bash'],
   ['wget -O- url | sh', 'wget -O- url | sh'],
+  ['curl x | /bin/bash', 'curl x | /bin/bash'],
+  ['curl x | sudo -E bash', 'curl x | sudo -E bash'],
+  ['curl x | tee f | sh', 'curl x | tee f | sh'],
+  ['curl x | dash', 'curl x | dash'],
+  ['echo $(curl x | bash)', 'echo $(curl x | bash)'],
+  ['echo `curl x | sh`', 'echo `curl x | sh`'],
+  ['bash <<EOF\ncurl x | sh\nEOF', 'bash <<EOF\ncurl x | sh\nEOF'],
+  ['wget -qO- x | sudo sh', 'wget -qO- x | sudo sh'],
+  // Shell shapes the parser reads.
+  ['time rm -rf /', 'time rm -rf /'],
+  ['if true; then rm -rf ~; fi', 'if true; then rm -rf ~; fi'],
+  ['for d in x; do rm -rf ~; done', 'for d in x; do rm -rf ~; done'],
+  ['while true; do rm -rf ~; done', 'while true; do rm -rf ~; done'],
+  ['{ rm -rf ~; }', '{ rm -rf ~; }'],
+  ['(rm -rf ~)', '(rm -rf ~)'],
+  ['echo $(rm -rf ~)', 'echo $(rm -rf ~)'],
+  ['echo `rm -rf ~`', 'echo `rm -rf ~`'],
+  ['! rm -rf /', '! rm -rf /'],
+  ['/bin/rm -rf ~', '/bin/rm -rf ~'],
+  ['\\rm -rf ~', '\\rm -rf ~'],
+  ['rm -rf "$HOME"/', 'rm -rf "$HOME"/'],
+  ["rm -rf '/'", "rm -rf '/'"],
+  ['time chmod -R 777 .', 'time chmod -R 777 .'],
+  ['/bin/chmod -R 777 .', '/bin/chmod -R 777 .'],
+  // Denied in a heredoc body fed to a program that may run it, and in the text `watch` runs.
+  ['at now <<EOF\nrm -rf /\nEOF', 'at now <<EOF\nrm -rf /\nEOF'],
+  ["watch 'rm -rf ~'", "watch 'rm -rf ~'"],
+  ['watch rm -rf ~', 'watch rm -rf ~'],
+  ['watch -n 5 rm -rf ~', 'watch -n 5 rm -rf ~'],
+  // Denied in a substitution inside an unquoted heredoc body: bash runs it while reading the body, whoever reads it.
+  ['cat > f <<EOF\n$(rm -rf ~)\nEOF', 'cat > f <<EOF\n$(rm -rf ~)\nEOF'],
+  ['cat > f <<EOF\n`rm -rf ~`\nEOF', 'cat > f <<EOF\n`rm -rf ~`\nEOF'],
+  ['echo "$(cat <<EOF\n$(rm -rf ~)\nEOF\n)"', 'echo "$(cat <<EOF\n$(rm -rf ~)\nEOF\n)"'],
+  // Denied in a substitution next to quoted or escaped text that looks like an escape or an opening.
+  ['echo \\\\$(rm -rf ~)', 'echo \\\\$(rm -rf ~)'],
+  ["echo '\\'$(rm -rf ~)", "echo '\\'$(rm -rf ~)"],
+  ["echo '$('$(rm -rf ~)", "echo '$('$(rm -rf ~)"],
+  ["echo '`'$(rm -rf ~)", "echo '`'$(rm -rf ~)"],
+  ['echo `echo \\`rm -rf ~\\``', 'echo `echo \\`rm -rf ~\\``'],
   // Allowed.
   ['rm -rf node_modules', PASS],
   ['rm -rf ./dist', PASS],
@@ -43,17 +82,36 @@ const BASH_ROWS: Row[] = [
   ['curl url -o file', PASS],
   ['curl url | jq .', PASS],
   ['echo ok && rm -rf dist', PASS],
+  ['time rm -rf dist', PASS],
+  ['if true; then rm -rf ./build; fi', PASS],
+  ['(rm -rf node_modules)', PASS],
+  ['echo $(rm -rf dist)', PASS],
+  ['/bin/rm -rf node_modules', PASS],
+  ['echo "rm -rf ~"', PASS],
+  ['cat <<EOF\nrm -rf ~\nEOF', PASS],
+  ['tee notes.md <<EOF\nrm -rf ~\nEOF', PASS],
+  ["watch 'rm -rf dist'", PASS],
+  ['watch rm -rf dist', PASS],
+  ["cat > f <<'EOF'\n$(rm -rf ~)\nEOF", PASS],
+  ['cat > f <<"EOF"\n$(rm -rf ~)\nEOF', PASS],
+  ['sudo -u root rm -rf /', PASS], // wrapper options are out of scope: no worse than today.
 ]
 
 function setup($: any, on: any) {
-  mock.store(on)
+  mock.store(on, { 'git-guard': false, 'dotenv-guard': false, 'secret-guard': false })
   on('session.cwd', () => ({ value: CWD }))
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
 }
 
+/** The pattern name rm-guard reports for a denied row. */
+function patternOf(command: string): string {
+  if (/\b(curl|wget)\b/.test(command)) return 'curl|wget ... | sh'
+  if (/\bchmod\b/.test(command)) return 'chmod -R 777'
+  return 'rm -rf <dangerous target>'
+}
+
 bashRowTests(BASH_ROWS, setup, (deny, command) => {
-  expect(deny).toContain(`BLOCKED: '${command}' matches dangerous pattern '`)
-  expect(deny).toContain("'. The user has prevented you from doing this.")
+  expect(deny).toBe(`BLOCKED: '${command}' matches dangerous pattern '${patternOf(command)}'. The user has prevented you from doing this.`)
 })
 
 test('an error inside the hook denies the call', async ($, on) => {
@@ -64,7 +122,9 @@ test('an error inside the hook denies the call', async ($, on) => {
 })
 
 test('rm-guard off lets everything pass, on blocks again', async ($, on) => {
-  setup($, on)
+  mock.store(on)
+  on('session.cwd', () => ({ value: CWD }))
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   expect(($ && (await $.command.run({ command: 'c-mods', args: 'rm-guard off' }))).text).toBe('rm-guard: off')
   expect((await $.tool.call({ tool: 'Bash', command: 'rm -rf ~' })).text).toBe('ran')
   const band = await $.ui.mount({ plugin: 'c-mods', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false } })
