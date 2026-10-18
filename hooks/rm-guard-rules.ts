@@ -1,6 +1,6 @@
 import { basename } from './bash-parser'
 import type { ShellCommand } from './bash-text-rules'
-import { pipelineCommands, SHELLS, simpleCommands } from './bash-text-rules'
+import { pipelineCommands, SHELLS } from './bash-text-rules'
 
 /** Regex fallback for text the parser cannot read. */
 const PIPE_TO_SHELL = /\b(curl|wget)\b[^|;&\n]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/
@@ -80,27 +80,33 @@ function isDownloadToShell(pipeline: readonly ShellCommand[]): boolean {
   return download !== -1 && pipeline.slice(download + 1).some(command => SHELLS.includes(runProgram(command)))
 }
 
-/**
- * The pattern a destructive part of the command matches, or undefined when it is safe. Each simple command
- * the shell would run is read through the shared parser, the program compared by base name; a command the
- * parser cannot read is split on its operators instead, so it still fails closed.
- */
-export function matchRmDangerous(command: string, cwd: string): string | undefined {
-  const pipelines = pipelineCommands(command)
-  if (pipelines === undefined ? PIPE_TO_SHELL.test(command) : pipelines.some(isDownloadToShell)) return PATTERN_PIPE
-  const commands = simpleCommands(command)
-  if (commands !== undefined) {
-    for (const { program, args } of commands) {
-      const pattern = matchProgram(program === undefined ? undefined : basename(program), args, cwd)
-      if (pattern !== undefined) return pattern
-    }
-    return undefined
+/** The pattern the parsed pipelines match: a download piped into a shell, or a destructive program by base name. */
+function matchParsed(pipelines: readonly ShellCommand[][], cwd: string): string | undefined {
+  if (pipelines.some(isDownloadToShell)) return PATTERN_PIPE
+  for (const { program, args } of pipelines.flat()) {
+    const pattern = matchProgram(program === undefined ? undefined : basename(program), args, cwd)
+    if (pattern !== undefined) return pattern
   }
+  return undefined
+}
+
+/** The pattern text the parser cannot read matches, split on its operators so it still fails closed. */
+function matchUnparsed(command: string, cwd: string): string | undefined {
+  if (PIPE_TO_SHELL.test(command)) return PATTERN_PIPE
   for (const segment of command.split(/&&|\|\||[;|&\n]/)) {
     const pattern = matchSegment(segment, cwd)
     if (pattern !== undefined) return pattern
   }
   return undefined
+}
+
+/**
+ * The pattern a destructive part of the command matches, or undefined when it is safe. The command is read
+ * once through the shared parser; a command the parser cannot read falls back to the regex reading.
+ */
+export function matchRmDangerous(command: string, cwd: string): string | undefined {
+  const pipelines = pipelineCommands(command)
+  return pipelines === undefined ? matchUnparsed(command, cwd) : matchParsed(pipelines, cwd)
 }
 
 export function rmBlockedMessage(command: string, pattern: string): string {
