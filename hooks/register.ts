@@ -1,5 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { executedText } from './bash-text-rules'
+import { CAVEMAN_WARNING, pluginSkillPaths, skillsShSkillPath } from './caveman-rules'
 import { bashBlockedMessage, blockedEnvIn, DOTENV_FILE_TOOLS, fileBlockedMessage, isBlockedEnvPath } from './dotenv-guard-rules'
 import { blockedMessage, matchDangerous } from './git-guard-rules'
 import { matchRmDangerous, rmBlockedMessage } from './rm-guard-rules'
@@ -77,15 +78,29 @@ function envPathDenial(path: unknown): { deny: string } | undefined {
   return typeof path === 'string' && path !== '' && isBlockedEnvPath(path) ? { deny: fileBlockedMessage(path) } : undefined
 }
 
-const CAVEMAN_WARNING = 'caveman: skill não encontrada, rode `npx skills@latest add C0nanT/c-skills`'
+/** A skill file's text; undefined when missing, unreadable or empty. */
+async function readSkillText($: EngineInterface, path: string): Promise<string | undefined> {
+  const text = await readText($, path)
+  return text === undefined || text.trim() === '' ? undefined : text
+}
 
-/** The skill's text, or undefined when it cannot be read (missing, unreadable or empty). */
+/**
+ * The skill's text from the first install that has it (skills.sh, then the c-skills plugin), or
+ * undefined when none can be read (missing, unreadable or empty). The plugin's path is looked up
+ * at each read, so a plugin update needs nothing here.
+ */
 async function readCavemanSkill($: EngineInterface): Promise<string | undefined> {
   try {
-    const home = await $.env.get('HOME')
-    if (home === undefined || home === '') return undefined
-    const text = await $.fs.read(`${home}/.claude/skills/caveman/SKILL.md`)
-    return text.trim() === '' ? undefined : text
+    const home = await readHome($)
+    if (home === '') return undefined
+    const skillsSh = await readSkillText($, skillsShSkillPath(home))
+    if (skillsSh !== undefined) return skillsSh
+    const registry = await readText($, `${home}/.claude/plugins/installed_plugins.json`)
+    for (const path of pluginSkillPaths(await readCwd($), registry, await readUserSettings($))) {
+      const text = await readSkillText($, path)
+      if (text !== undefined) return text
+    }
+    return undefined
   } catch {
     return undefined
   }
