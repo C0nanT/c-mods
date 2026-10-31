@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { buildLogLine, localDate, logPath, projectKey } from './session-log-rules'
+import { buildLogLine, localDate, LOG_MAX_BYTES, logDir, planLogWrite, projectKey } from './session-log-rules'
 
 test('project key: folder name plus a hash of the whole path', () => {
   expect(projectKey('/home/conan/projects/c-mods')).toMatch(/^c-mods-[0-9a-f]{8}$/)
@@ -22,8 +22,67 @@ test('project key: a missing cwd still gives a usable key', () => {
   expect(projectKey('/')).toMatch(/^unknown-[0-9a-f]{8}$/)
 })
 
-test('log path: home, log folder, project key, day', () => {
-  expect(logPath('/home/conan', 'c-mods-1a2b3c4d', '2026-10-18')).toBe('/home/conan/.claude/log/c-mods-1a2b3c4d/2026-10-18.jsonl')
+test('log dir: home, log folder, project key', () => {
+  expect(logDir('/home/conan', 'c-mods-1a2b3c4d')).toBe('/home/conan/.claude/log/c-mods-1a2b3c4d')
+})
+
+const LINE = '{"prompt":"x"}\n'
+
+test('plan: an empty folder opens a file named by the day', () => {
+  expect(planLogWrite([], '2026-10-30', LINE)).toEqual({ name: '2026-10-30.jsonl', isNew: true, remove: [] })
+})
+
+test('plan: a line that fits goes to the newest file, whatever its day', () => {
+  const files = [{ name: '2026-10-12.jsonl', size: 100 }]
+  expect(planLogWrite(files, '2026-10-30', LINE)).toEqual({ name: '2026-10-12.jsonl', isNew: false, remove: [] })
+})
+
+test('plan: a line that fills the file exactly still fits', () => {
+  const files = [{ name: '2026-10-12.jsonl', size: LOG_MAX_BYTES - LINE.length }]
+  expect(planLogWrite(files, '2026-10-30', LINE).name).toBe('2026-10-12.jsonl')
+})
+
+test('plan: a full file opens a new one; under the cap nothing is deleted', () => {
+  const files = [{ name: '2026-10-12.jsonl', size: LOG_MAX_BYTES }]
+  expect(planLogWrite(files, '2026-10-30', LINE)).toEqual({ name: '2026-10-30.jsonl', isNew: true, remove: [] })
+})
+
+test('plan: a third file deletes the oldest', () => {
+  const files = [{ name: '2026-10-30.jsonl', size: LOG_MAX_BYTES }, { name: '2026-10-01.jsonl', size: LOG_MAX_BYTES }]
+  expect(planLogWrite(files, '2026-11-04', LINE)).toEqual({ name: '2026-11-04.jsonl', isNew: true, remove: ['2026-10-01.jsonl'] })
+})
+
+test('plan: a file filled the same day it opened gets a part number, ordered after it', () => {
+  const files = [{ name: '2026-10-30.jsonl', size: LOG_MAX_BYTES }, { name: '2026-10-29.jsonl', size: 5 }]
+  expect(planLogWrite(files, '2026-10-30', LINE)).toEqual({ name: '2026-10-30.2.jsonl', isNew: true, remove: ['2026-10-29.jsonl'] })
+  const parts = [{ name: '2026-10-30.2.jsonl', size: LOG_MAX_BYTES }, { name: '2026-10-30.jsonl', size: LOG_MAX_BYTES }]
+  expect(planLogWrite(parts, '2026-10-30', LINE)).toEqual({ name: '2026-10-30.3.jsonl', isNew: true, remove: ['2026-10-30.jsonl'] })
+})
+
+test('plan: the old one-file-per-day logs are cut to the newest two', () => {
+  const files = ['2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21'].map(day => ({ name: `${day}.jsonl`, size: 10 }))
+  expect(planLogWrite(files, '2026-10-30', LINE)).toEqual({ name: '2026-10-21.jsonl', isNew: false, remove: ['2026-10-18.jsonl', '2026-10-19.jsonl'] })
+})
+
+test('plan: files this log did not name are never counted or deleted', () => {
+  const files = [{ name: 'notes.txt', size: 1 }, { name: 'old.jsonl', size: 1 }, { name: '2026-10-29.jsonl', size: LOG_MAX_BYTES }, { name: '2026-10-28.jsonl', size: 1 }]
+  expect(planLogWrite(files, '2026-10-30', LINE).remove).toEqual(['2026-10-28.jsonl'])
+})
+
+test('plan: size counts UTF-8 bytes, not characters', () => {
+  const accented = 'ã'.repeat(10)
+  const files = [{ name: '2026-10-30.jsonl', size: LOG_MAX_BYTES - 15 }]
+  expect(planLogWrite(files, '2026-10-30', accented).isNew).toBe(true)
+})
+
+test('plan: an empty newest file takes even a line over the limit', () => {
+  const files = [{ name: '2026-10-30.jsonl', size: 0 }]
+  expect(planLogWrite(files, '2026-10-30', LINE).name).toBe('2026-10-30.jsonl')
+})
+
+test('plan: a clock that went back never names a file older than the newest', () => {
+  const files = [{ name: '2026-10-30.jsonl', size: LOG_MAX_BYTES }]
+  expect(planLogWrite(files, '2026-10-29', LINE).name).toBe('2026-10-30.2.jsonl')
 })
 
 test('local date follows the zone, not UTC', () => {
@@ -33,20 +92,39 @@ test('local date follows the zone, not UTC', () => {
   expect(localDate(at, 'Not/AZone')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
 })
 
-test('log line: one JSON line with time, prompt, commands, duration', () => {
-  const line = buildLogLine({ at: Date.parse('2026-10-18T12:00:00Z'), prompt: 'fix it', commands: ['ls', 'git status'], durationMs: 4200, isAborted: false })
+const ENTRY = { at: 0, sessionId: 's1', turnId: 't1', model: 'claude-opus-5-5', reason: 'answer', prompt: 'x', commands: [], durationMs: 1 }
+
+test('log line: one JSON line with every field, in a fixed order', () => {
+  const tokens = { input: 1, output: 2, cacheRead: 3, cacheCreation: 4 }
+  const line = buildLogLine({ ...ENTRY, at: Date.parse('2026-10-18T12:00:00Z'), effort: 'high', prompt: 'fix it', commands: ['ls', 'git status'], durationMs: 4200, tokens })
   expect(line.endsWith('\n')).toBe(true)
   expect(line.slice(0, -1)).not.toContain('\n')
-  expect(JSON.parse(line)).toEqual({ time: '2026-10-18T12:00:00.000Z', prompt: 'fix it', commands: ['ls', 'git status'], durationMs: 4200, isAborted: false })
+  expect(Object.keys(JSON.parse(line))).toEqual(['time', 'sessionId', 'turnId', 'model', 'effort', 'reason', 'durationMs', 'prompt', 'commands', 'tokens'])
+  expect(JSON.parse(line)).toEqual({
+    time: '2026-10-18T12:00:00.000Z',
+    sessionId: 's1',
+    turnId: 't1',
+    model: 'claude-opus-5-5',
+    effort: 'high',
+    reason: 'answer',
+    durationMs: 4200,
+    prompt: 'fix it',
+    commands: ['ls', 'git status'],
+    tokens,
+  })
 })
 
 test('log line: a multi-line prompt stays on one line and round-trips', () => {
-  const line = buildLogLine({ at: 0, prompt: 'a\nb\n"c"', commands: [], durationMs: 1, isAborted: false })
+  const line = buildLogLine({ ...ENTRY, prompt: 'a\nb\n"c"' })
   expect(line.slice(0, -1)).not.toContain('\n')
   expect(JSON.parse(line).prompt).toBe('a\nb\n"c"')
   expect(JSON.parse(line).commands).toEqual([])
 })
 
-test('log line: an aborted turn is marked', () => {
-  expect(JSON.parse(buildLogLine({ at: 0, prompt: 'x', commands: [], durationMs: 1, isAborted: true })).isAborted).toBe(true)
+test('log line: an unknown effort or token count is left out', () => {
+  expect(Object.keys(JSON.parse(buildLogLine(ENTRY)))).toEqual(['time', 'sessionId', 'turnId', 'model', 'reason', 'durationMs', 'prompt', 'commands'])
+})
+
+test('log line: a numeric effort is kept as a number', () => {
+  expect(JSON.parse(buildLogLine({ ...ENTRY, effort: 32000 })).effort).toBe(32000)
 })

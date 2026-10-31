@@ -4,8 +4,8 @@ import { bashBlockedMessage, blockedEnvIn, DOTENV_FILE_TOOLS, fileBlockedMessage
 import { blockedMessage, matchDangerous } from './git-guard-rules'
 import { matchRmDangerous, rmBlockedMessage } from './rm-guard-rules'
 import { isExtensionRule, matchSecretCommand, matchSecretPath, resolveCommandPath, SECRET_FILE_TOOLS, secretBlockedMessage } from './secret-guard-rules'
-import { buildLogLine, localDate, logPath, projectKey } from './session-log-rules'
-import type { LogEntry } from './session-log-rules'
+import { buildLogLine, localDate, logDir, planLogWrite, projectKey } from './session-log-rules'
+import type { LogEntry, LogFile } from './session-log-rules'
 import { isWsl, SOUND_DEBOUNCE_MS, ubuntuCommands, wslCommand } from './sound-rules'
 import { buildStatusSegments, chooseTimezone, parseWindowsTimezone, pickHostTimezone, SEGMENT_SEPARATOR, settingsEffort, TONE_COLORS } from './statusline-rules'
 import type { StatusSegment } from './statusline-rules'
@@ -281,21 +281,40 @@ async function playDone($: EngineInterface): Promise<void> {
   for (const argv of ubuntuCommands()) if (await runs($, argv)) return
 }
 
-/** Appends one line to the turn log. The fs call only replaces a whole file, so the day's text is read first; a log that exists but cannot be read is left untouched. */
-async function appendLogLine($: EngineInterface, path: string, line: string): Promise<void> {
-  let previous = ''
-  if (await $.fs.exists(path)) previous = await $.fs.read(path)
-  await $.fs.write(path, previous + line)
+/** The files in a project's log folder; a folder not there yet, or unreadable, lists none. */
+async function listLogFiles($: EngineInterface, dir: string): Promise<LogFile[]> {
+  try {
+    return (await $.fs.list(dir)).filter(entry => entry.kind === 'file').map(({ name, size }) => ({ name, size }))
+  } catch {
+    return []
+  }
 }
 
-/** Writes the finished turn to the log of the project the session is open in. Never throws: a log must not disturb a turn. */
-async function logTurn($: EngineInterface, state: StatusLineState, turn: Omit<LogEntry, 'at'>): Promise<void> {
+/**
+ * Adds one line to a log file. A new file is written whole, its folder created; an existing one gets the
+ * line from `tee -a`, since a read stops at 4 MiB and the file grows past it. A file planned as new that
+ * already exists (its folder could not be listed) is appended to, never overwritten.
+ */
+async function appendLogLine($: EngineInterface, path: string, line: string, isNew: boolean): Promise<void> {
+  if (isNew && !(await pathExists($, path))) return $.fs.write(path, line)
+  const result = await $.process.run(['tee', '-a', path], { stdin: line })
+  if (result.exitCode !== 0) throw new Error(result.stderr)
+}
+
+/** What a turn handler knows of a finished turn; the time, the session and, when no step named one, the model are read here. */
+type FinishedTurn = Omit<LogEntry, 'at' | 'sessionId' | 'model'> & { model?: string }
+
+/** Writes the finished turn to the log of the project the session is open in, then deletes what the size limits retire. Never throws: a log must not disturb a turn. */
+async function logTurn($: EngineInterface, state: StatusLineState, turn: FinishedTurn): Promise<void> {
   try {
     const at = await $.clock.now()
-    const path = logPath(await readHome($), projectKey(await readCwd($)), localDate(at, await resolveTimezone($, state)))
-    await appendLogLine($, path, buildLogLine({ at, ...turn }))
+    const dir = logDir(await readHome($), projectKey(await readCwd($)))
+    const line = buildLogLine({ ...turn, at, sessionId: await $.session.id(), model: turn.model ?? (await $.session.model()) })
+    const plan = planLogWrite(await listLogFiles($, dir), localDate(at, await resolveTimezone($, state)), line)
+    await appendLogLine($, `${dir}/${plan.name}`, line, plan.isNew)
+    for (const name of plan.remove) await runs($, ['rm', '-f', '--', `${dir}/${name}`])
   } catch {
-    // A failed log write is dropped.
+    // A failed log write is dropped, and nothing is deleted.
   }
 }
 
@@ -312,7 +331,8 @@ async function openPane($: EngineInterface): Promise<void> {
 export const register: Register = on => {
   let isCavemanWarned = false
   let lastSoundAt: number | undefined
-  let turnLog = { prompt: '', commands: [] as string[], wasLogOn: true }
+  /** The main-loop turn being logged; the model and effort are the last step's. */
+  let turnLog: { prompt: string; commands: string[]; wasLogOn: boolean; model?: string; effort?: string | number } = { prompt: '', commands: [], wasLogOn: true }
   const statusLine: StatusLineState = { isTimezoneResolved: false, isSavedEffortSeen: false }
 
   on('session.start', async ($, e, next) => {
@@ -350,7 +370,11 @@ export const register: Register = on => {
   })
 
   on('turn.step', async function* ($, e, next) {
-    if (e.agentId === undefined) statusLine.effort = e.effort
+    // The status line and the turn log both keep the main loop's latest step.
+    if (e.agentId === undefined) {
+      statusLine.effort = e.effort
+      turnLog = { ...turnLog, model: e.model, effort: e.effort }
+    }
     return yield* next(e)
   })
 
@@ -476,7 +500,10 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       const { wasLogOn, ...entry } = turnLog
       turnLog = { prompt: '', commands: [], wasLogOn: true }
-      if (wasLogOn && held['session-log']) await logTurn($, statusLine, { ...entry, durationMs: e.durationMs, isAborted: e.isAborted })
+      const { usage } = e
+      const tokens = usage && { input: usage.input_tokens, output: usage.output_tokens, cacheRead: usage.cache_read_input_tokens, cacheCreation: usage.cache_creation_input_tokens }
+      const turn = { ...entry, model: usage?.model ?? entry.model, turnId: e.turnId, reason: e.reason, durationMs: e.durationMs, tokens }
+      if (wasLogOn && held['session-log']) await logTurn($, statusLine, turn)
     }
     if (e.agentId !== undefined || e.isAborted || !held.sound) return result
     const now = await $.clock.now()
