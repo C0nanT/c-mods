@@ -81,9 +81,14 @@ Inside Claude Code:
 /plugin install c-mods --marketplace C0nanT/c-mods
 ```
 
-The `caveman` function reads `~/.claude/skills/caveman/SKILL.md`. If
-`ls ~/.claude/skills/caveman/SKILL.md` fails, install the skills first:
-`npx skills@latest add C0nanT/c-skills`.
+The `caveman` function reads the caveman skill of `C0nanT/c-skills`: the
+skills.sh copy at `~/.claude/skills/caveman/SKILL.md` when there is one, else
+the c-skills plugin's. If you have neither, install the plugin:
+
+```
+/plugin marketplace add C0nanT/c-skills
+/plugin install c-skills@c-skills
+```
 
 ## Coming from the `claude-hooks` marketplace
 
