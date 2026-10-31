@@ -1,29 +1,51 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { projectKey } from './session-log-rules'
+import { LOG_MAX_BYTES, projectKey } from './session-log-rules'
 
 const HOME = '/home/test'
 const NOON = Date.parse('2026-10-18T12:00:00Z')
-const DONE = { answer: 'ok', durationMs: 4200, isAborted: false, turnId: 't1' }
+const USAGE = { model: 'claude-opus-5-5', input_tokens: 10, output_tokens: 20, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 }
+const DONE = { answer: 'ok', durationMs: 4200, isAborted: false, reason: 'answer', turnId: 't1', usage: USAGE }
 
-type Opts = { cwd?: string; stored?: Record<string, unknown>; files?: Record<string, string>; failWrite?: boolean; failRead?: boolean }
+type Opts = { cwd?: string; stored?: Record<string, unknown>; files?: Record<string, string>; failWrite?: boolean; failAppend?: boolean; failList?: boolean; sizes?: Record<string, number> }
 
 function world(on: any, opts: Opts = {}) {
   mock.store(on, opts.stored ?? {})
   mock.env(on, { HOME, STATUSLINE_TZ: 'UTC' })
   const clock = mock.clock(on, { now: NOON })
   const files: Record<string, string> = { ...opts.files }
+  const runs: string[][] = []
   on('session.cwd', () => ({ value: opts.cwd ?? '/work/app' }))
+  on('session.id', () => ({ value: 's1' }))
+  on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
   on('fs.exists', (_$: any, e: any) => ({ value: e.path in files }))
-  on('fs.read', (_$: any, e: any) => (opts.failRead || !(e.path in files) ? { deny: 'ENOENT' } : { value: files[e.path] }))
+  on('fs.list', (_$: any, e: any) => {
+    if (opts.failList) return { deny: 'EACCES' }
+    const names = Object.keys(files).filter(path => path.startsWith(`${e.path}/`)).map(path => path.slice(e.path.length + 1))
+    if (names.length === 0) return { deny: 'ENOENT' }
+    const size = (name: string) => opts.sizes?.[name] ?? files[`${e.path}/${name}`]!.length
+    return { value: names.map(name => ({ name, kind: 'file', size: size(name), mtimeMs: 0, isLink: false })) }
+  })
   on('fs.write', (_$: any, e: any) => {
     if (opts.failWrite) return { deny: 'EACCES' }
     files[e.path] = e.text
     return { value: undefined }
   })
+  on('process.run', (_$: any, e: any) => {
+    const argv: string[] = [...e.argv]
+    runs.push(argv)
+    const [cmd, , , path] = argv
+    if (cmd === 'tee') {
+      const target = argv[2]!
+      if (opts.failAppend || !(target in files)) return { value: { exitCode: 1, stdout: '', stderr: 'tee: failed' } }
+      files[target] += e.init.stdin
+    }
+    if (cmd === 'rm' && path !== undefined) delete files[path]
+    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
   on('prompt.submit', (_$: any, e: any) => ({ text: e.text }))
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran', text: 'ran' }))
   on('turn.complete', (_$: any, e: any) => ({ text: e.answer }))
-  return { files, clock }
+  return { files, clock, runs }
 }
 
 function logFile(cwd: string, date = '2026-10-18') {
@@ -40,12 +62,65 @@ async function turn($: any, prompt: string, commands: string[] = [], done: objec
   await $.turn.complete(done)
 }
 
-test('a finished turn writes one line with prompt, commands and duration', async ($, on) => {
+async function step($: any, model: string, effort?: string, agentId?: string) {
+  for await (const _chunk of $.turn.step({ turnId: 't1', index: 0, model, effort, messageCount: 1, agentId })) void _chunk
+}
+
+test('a finished turn writes one line with session, model, effort, tokens, prompt and commands', async ($, on) => {
   const w = world(on)
-  await turn($, 'fix the bug', ['ls', 'git status'])
+  on('turn.step', async function* () {
+    return { turnId: 't1', index: 0, answer: '', toolUses: [] }
+  })
+  await $.prompt.submit({ text: 'fix the bug' })
+  await step($, 'claude-opus-5-5', 'high')
+  for (const command of ['ls', 'git status']) await $.tool.call({ tool: 'Bash', command })
+  await $.turn.complete(DONE)
   expect(lines(w.files, logFile('/work/app'))).toEqual([
-    { time: '2026-10-18T12:00:00.000Z', prompt: 'fix the bug', commands: ['ls', 'git status'], durationMs: 4200, isAborted: false },
+    {
+      time: '2026-10-18T12:00:00.000Z',
+      sessionId: 's1',
+      turnId: 't1',
+      model: 'claude-opus-5-5',
+      effort: 'high',
+      reason: 'answer',
+      durationMs: 4200,
+      prompt: 'fix the bug',
+      commands: ['ls', 'git status'],
+      tokens: { input: 10, output: 20, cacheRead: 300, cacheCreation: 40 },
+    },
   ])
+})
+
+test('a turn with no usage takes the model from its last step and logs no tokens', async ($, on) => {
+  const w = world(on)
+  on('turn.step', async function* () {
+    return { turnId: 't1', index: 0, answer: '', toolUses: [] }
+  })
+  await $.prompt.submit({ text: 'stop' })
+  await step($, 'claude-haiku-5-5', 'low')
+  await step($, 'claude-opus-5-5', 'max', 'sub1')
+  await $.turn.complete({ ...DONE, usage: undefined, isAborted: true, reason: 'aborted' })
+  const [line] = lines(w.files, logFile('/work/app'))
+  expect([line.model, line.effort, line.reason, 'tokens' in line]).toEqual(['claude-haiku-5-5', 'low', 'aborted', false])
+})
+
+test('a turn with no step and no usage takes the session model and logs no effort', async ($, on) => {
+  const w = world(on)
+  await turn($, 'x', [], { ...DONE, usage: undefined, reason: 'error' })
+  const [line] = lines(w.files, logFile('/work/app'))
+  expect([line.model, 'effort' in line, line.reason]).toEqual(['claude-sonnet-5-5', false, 'error'])
+})
+
+test('the effort of one turn does not leak into the next', async ($, on) => {
+  const w = world(on)
+  on('turn.step', async function* () {
+    return { turnId: 't1', index: 0, answer: '', toolUses: [] }
+  })
+  await $.prompt.submit({ text: 'one' })
+  await step($, 'claude-opus-5-5', 'high')
+  await $.turn.complete(DONE)
+  await turn($, 'two')
+  expect(lines(w.files, logFile('/work/app')).map(l => l.effort)).toEqual(['high', undefined])
 })
 
 test('a turn with no Bash commands logs an empty list', async ($, on) => {
@@ -77,19 +152,40 @@ test('two projects with the same folder name never share a log', async ($, on) =
   expect(logFile('/work/one/app')).not.toBe(logFile('/work/two/app'))
 })
 
-test('a new day starts a new file', async ($, on) => {
+test('a new day keeps appending to the current file', async ($, on) => {
   const w = world(on)
   await turn($, 'today')
   await w.clock.advance(24 * 3600 * 1000)
   await turn($, 'tomorrow')
-  expect(lines(w.files, logFile('/work/app', '2026-10-18')).map(l => l.prompt)).toEqual(['today'])
-  expect(lines(w.files, logFile('/work/app', '2026-10-19')).map(l => l.prompt)).toEqual(['tomorrow'])
+  expect(lines(w.files, logFile('/work/app', '2026-10-18')).map(l => l.prompt)).toEqual(['today', 'tomorrow'])
+  expect(Object.keys(w.files)).toEqual([logFile('/work/app', '2026-10-18')])
 })
 
-test('an aborted turn is logged and marked', async ($, on) => {
+test('a full file opens a new one named by the day, and the old one stays', async ($, on) => {
+  const old = logFile('/work/app', '2026-10-01')
+  const w = world(on, { files: { [old]: '{"old":true}\n' }, sizes: { '2026-10-01.jsonl': LOG_MAX_BYTES } })
+  await turn($, 'fresh')
+  expect(w.files[old]).toBe('{"old":true}\n')
+  expect(lines(w.files, logFile('/work/app')).map(l => l.prompt)).toEqual(['fresh'])
+})
+
+test('a third file deletes the oldest of the project', async ($, on) => {
+  const oldest = logFile('/work/app', '2026-10-01')
+  const full = logFile('/work/app', '2026-10-10')
+  const other = `${HOME}/.claude/log/${projectKey('/work/other')}/2026-09-01.jsonl`
+  const w = world(on, {
+    files: { [oldest]: 'a\n', [full]: 'b\n', [other]: 'c\n' },
+    sizes: { '2026-10-01.jsonl': LOG_MAX_BYTES, '2026-10-10.jsonl': LOG_MAX_BYTES },
+  })
+  await turn($, 'fresh')
+  expect(w.runs).toContainEqual(['rm', '-f', '--', oldest])
+  expect(Object.keys(w.files).sort()).toEqual([other, full, logFile('/work/app')].sort())
+})
+
+test('an aborted turn is logged with its reason', async ($, on) => {
   const w = world(on)
-  await turn($, 'stop me', [], { ...DONE, isAborted: true })
-  expect(lines(w.files, logFile('/work/app'))[0].isAborted).toBe(true)
+  await turn($, 'stop me', [], { ...DONE, isAborted: true, reason: 'aborted' })
+  expect(lines(w.files, logFile('/work/app'))[0].reason).toBe('aborted')
 })
 
 test('a sub-agent turn writes nothing', async ($, on) => {
@@ -121,11 +217,20 @@ test('a failing write does not break the turn', async ($, on) => {
   expect(out.text).toBe('ok')
 })
 
-test('an unreadable existing log is left alone, not overwritten', async ($, on) => {
+test('a failed append changes no file, deletes nothing and does not break the turn', async ($, on) => {
   const path = logFile('/work/app')
-  const w = world(on, { files: { [path]: '{"old":true}\n' }, failRead: true })
+  const w = world(on, { files: { [path]: '{"old":true}\n' }, failAppend: true })
+  await $.prompt.submit({ text: 'x' })
+  expect((await $.turn.complete(DONE)).text).toBe('ok')
+  expect(w.files).toEqual({ [path]: '{"old":true}\n' })
+  expect(w.runs.some(argv => argv[0] === 'rm')).toBe(false)
+})
+
+test('an existing log in a folder that cannot be listed is appended to, not overwritten', async ($, on) => {
+  const path = logFile('/work/app')
+  const w = world(on, { files: { [path]: '{"old":true}\n' }, failList: true })
   await turn($, 'new')
-  expect(w.files[path]).toBe('{"old":true}\n')
+  expect(lines(w.files, path).map(l => l.prompt ?? 'old')).toEqual(['old', 'new'])
 })
 
 test('logging never changes what the guards decide', async ($, on) => {
